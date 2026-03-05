@@ -1,0 +1,28 @@
+[
+  {
+    "spName": "sp_GetCustomerOrders",
+    "parameters": [
+      {
+        "name": "@CustomerID",
+        "value": "1001"
+      },
+      {
+        "name": "@StartDate",
+        "value": "2024-01-01"
+      }
+    ]
+  },
+  {
+    "spName": "sp_UpdateProductStock",
+    "parameters": [
+      {
+        "name": "@ProductID",
+        "value": "5001"
+      },
+      {
+        "name": "@Quantity",
+        "value": "100"
+      }
+    ]
+  }
+]
