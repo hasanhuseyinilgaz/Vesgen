@@ -6,7 +6,7 @@ import { exportToExcel } from "@/lib/exportUtils";
 
 import { useSystemMonitor } from "@/hooks/useSystemMonitor";
 
-import DataToolbar from "@/components/DataToolbar";
+import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
 
@@ -31,12 +31,20 @@ export default function ActivityMonitorPage() {
   }, []);
 
   return (
-    <div className="h-full overflow-y-auto bg-background custom-scrollbar">
-      <div className="p-6 flex flex-col gap-6">
+    <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+      <div className="flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
         <div className="flex flex-col gap-0 shrink-0">
-          <DataToolbar
+          <PageHeader
             title={t("activity.title")}
-            recordCount={activityData.length}
+            icon={Activity}
+            description={t("activity.description")}
+            badges={[
+              {
+                label: t("components.dataToolbar.records"),
+                value: `${activityData.length} ${t("components.dataToolbar.records")}`,
+              },
+            ]}
+            showRecordCount={false}
             onRefresh={() => loadAllData(false)}
             loading={loading}
             showLimitSelector={false}

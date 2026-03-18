@@ -27,6 +27,8 @@ import {
 import { cn } from "@/lib/utils";
 import PasswordModal from "@/components/PasswordModal";
 import ActionTooltip from "@/components/ActionTooltip";
+import ColumnManager from "@/components/ColumnManager";
+import { Search as SearchIcon } from "lucide-react";
 
 export interface DataTableColumn {
   name: string;
@@ -72,6 +74,17 @@ const formatToDatetimeLocal = (val: any) => {
   )}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
+const safeStringify = (obj: any) => {
+  try {
+    return JSON.stringify(obj, (_key, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+  } catch (e) {
+    console.error("Stringify error:", e);
+    return "";
+  }
+};
+
 export default function DataTable({
   data = [],
   columns = [],
@@ -104,6 +117,94 @@ export default function DataTable({
   >(new Set());
   const prevDataRef = useRef<any[]>([]);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+
+  // Persistence Key
+  const storageKey = `vesgen_table_cols_${title?.replace(/\s+/g, "_").toLowerCase()}`;
+
+  // Load or Reset Settings
+  useEffect(() => {
+    if (!title || safeColumns.length === 0) return;
+
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        const { visible, order } = JSON.parse(saved);
+        if (visible) setVisibleColumns(visible);
+        if (order) setColumnOrder(order);
+      } catch (e) {
+        console.error("Failed to load table settings:", e);
+      }
+    } else {
+      // Default initialization
+      const initialOrder = safeColumns.map((c) => c.name);
+      setColumnOrder(initialOrder);
+
+      const initialVisible: Record<string, boolean> = {};
+      initialOrder.forEach((col) => {
+        initialVisible[col] = true;
+      });
+      setVisibleColumns(initialVisible);
+    }
+    
+    // Satır seçimlerini ve sayfayı da sıfırla
+    setCurrentPage(1);
+    setSelectedRowData(null);
+    setEditData(null);
+  }, [title, storageKey, safeColumns]);
+
+  // Save Persistence
+  const saveSettings = (visible: Record<string, boolean>, order: string[]) => {
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({ visible, order })
+    );
+  };
+
+  const handleVisibilityChange = (column: string, isVisible: boolean) => {
+    const newVisible = { ...visibleColumns, [column]: isVisible };
+    setVisibleColumns(newVisible);
+    saveSettings(newVisible, columnOrder);
+  };
+
+  const handleOrderChange = (newOrder: string[]) => {
+    setColumnOrder(newOrder);
+    saveSettings(visibleColumns, newOrder);
+  };
+
+  const handleResetSettings = () => {
+    const defaultOrder = safeColumns.map((c) => c.name);
+    const defaultVisible: Record<string, boolean> = {};
+    defaultOrder.forEach((col) => {
+      defaultVisible[col] = true;
+    });
+    setColumnOrder(defaultOrder);
+    setVisibleColumns(defaultVisible);
+    localStorage.removeItem(storageKey);
+  };
+
+  // Filter and Sort Data
+  const filteredData = safeData.filter((row) => {
+    if (!searchTerm) return true;
+    return Object.values(row).some((val) =>
+      String(val).toLowerCase().includes(searchTerm.toLowerCase()),
+    );
+  });
+
+  const orderedColumns = columnOrder.length > 0
+    ? columnOrder
+        .map((name) => safeColumns.find((c) => c.name === name))
+        .filter(Boolean) as DataTableColumn[]
+    : safeColumns;
+
+  const finalColumns = orderedColumns.filter(
+    (col) => visibleColumns[col.name] !== false,
+  );
+
   useEffect(() => {
     setCurrentPage(1);
   }, [safeData.length, pageSizeInput]);
@@ -123,10 +224,10 @@ export default function DataTable({
           setTimeout(() => setHighlightedRowIndexes(new Set()), 2000);
         }
       } else {
-        const prevStrings = new Set(prevData.map((row) => JSON.stringify(row)));
+        const prevStrings = new Set(prevData.map((row) => safeStringify(row)));
         const newRowIndexes = new Set<number>();
         safeData.forEach((row, index) => {
-          if (!prevStrings.has(JSON.stringify(row))) newRowIndexes.add(index);
+          if (!prevStrings.has(safeStringify(row))) newRowIndexes.add(index);
         });
         if (newRowIndexes.size > 0) {
           setHighlightedRowIndexes(newRowIndexes);
@@ -138,8 +239,8 @@ export default function DataTable({
   }, [safeData, safeColumns]);
 
   const itemsPerPage = parseInt(pageSizeInput, 10) || 20;
-  const totalPages = Math.ceil(safeData.length / itemsPerPage);
-  const paginatedData = safeData.slice(
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const paginatedData = filteredData.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
@@ -283,16 +384,39 @@ export default function DataTable({
   return (
     <div
       className={cn(
-        "bg-card shadow-sm border rounded-xl flex flex-col w-full overflow-hidden relative z-0",
+        "bg-card/30 glass border rounded-xl flex flex-col w-full overflow-hidden relative z-0 shadow-lg",
         className,
       )}
     >
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none -z-10" />
+
+      {/* Toolbar: Search and Column Manager */}
+      <div className="flex items-center justify-between p-4 bg-muted/20 border-b gap-4">
+        <div className="relative flex-1 max-w-md">
+          <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={t("components.dataTable.searchPlaceholder") || "Quick search in table..."}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 h-9 bg-background/50 border-border/50 focus-visible:ring-primary/50"
+          />
+        </div>
+        <ColumnManager
+          columns={safeColumns.map((c) => c.name)}
+          visibleColumns={visibleColumns}
+          columnOrder={columnOrder}
+          onVisibilityChange={handleVisibilityChange}
+          onOrderChange={handleOrderChange}
+          onReset={handleResetSettings}
+        />
+      </div>
+
       <div className="w-full overflow-x-auto relative">
         <table className="min-w-full text-sm text-left border-collapse">
           <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-muted/95 backdrop-blur-md">
               <th className="w-10 px-4 py-3 border-b"></th>
-              {safeColumns.map((col) => (
+              {finalColumns.map((col) => (
                 <th
                   key={col.name}
                   onClick={() => handleSortClick(col.name)}
@@ -374,7 +498,7 @@ export default function DataTable({
                         <Maximize2 className="w-3.5 h-3.5" />
                       </ActionTooltip>
                     </td>
-                    {safeColumns.map((col) => {
+                    {finalColumns.map((col) => {
                       const value = row[col.name];
 
                       let displayValue =
@@ -418,17 +542,17 @@ export default function DataTable({
         </table>
       </div>
 
-      {safeData.length > 0 && (
+      {filteredData.length > 0 && (
         <div className="flex flex-wrap items-center justify-between px-6 py-3 bg-muted/30 border-t shrink-0 gap-4">
           <div className="text-sm text-muted-foreground">
             {t("components.dataTable.totalRecords")}{" "}
             <span className="font-medium text-foreground">
-              {safeData.length}
+              {filteredData.length}
             </span>{" "}
             {t("components.dataTable.records")} (
             <span className="ml-1">
               {(currentPage - 1) * itemsPerPage + 1}-
-              {Math.min(currentPage * itemsPerPage, safeData.length)}
+              {Math.min(currentPage * itemsPerPage, filteredData.length)}
             </span>
             )
           </div>

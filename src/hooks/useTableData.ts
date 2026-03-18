@@ -16,6 +16,7 @@ export function useTableData({
   const [activeItem, setActiveItem] = useState<string | null>(null);
 
   const [activeWhereClause, setActiveWhereClause] = useState("");
+  const [activeJoins, setActiveJoins] = useState<any[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [topRows, setTopRows] = useState("100");
 
@@ -26,6 +27,7 @@ export function useTableData({
   const latestParams = useRef({
     activeItem,
     activeWhereClause,
+    activeJoins,
     sortConfig,
     topRows,
   });
@@ -34,20 +36,23 @@ export function useTableData({
     latestParams.current = {
       activeItem,
       activeWhereClause,
+      activeJoins,
       sortConfig,
       topRows,
     };
-  }, [activeItem, activeWhereClause, sortConfig, topRows]);
+  }, [activeItem, activeWhereClause, activeJoins, sortConfig, topRows]);
 
   const loadData = async (
     itemName: string,
     whereClause: string = "",
     currentSort: SortConfig | null = sortConfig,
     isSilent: boolean = false,
+    joins: any[] = [],
   ) => {
     if (!isSilent) setLoading(true);
     setActiveItem(itemName);
     setActiveWhereClause(whereClause);
+    setActiveJoins(joins);
 
     try {
       if (!isSilent || columns.length === 0) {
@@ -62,11 +67,18 @@ export function useTableData({
         orderBy: currentSort
           ? `${currentSort.column} ${currentSort.direction}`
           : "",
+        joins,
       });
 
       if (dataResult?.success) {
         setData(dataResult.data || []);
+      } else {
+        console.error("Veri yükleme hatası:", dataResult?.message);
+        setData([]);
       }
+    } catch (error) {
+      console.error("Tablo yüklenirken hata oluştu:", error);
+      setData([]);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -98,6 +110,7 @@ export function useTableData({
     setIsLiveActive(false);
     setSortConfig(null);
     setShowFilter(false);
+    setActiveJoins([]);
   };
 
   return {
@@ -108,6 +121,7 @@ export function useTableData({
     topRows,
     setTopRows,
     activeWhereClause,
+    activeJoins,
     sortConfig,
     showFilter,
     setShowFilter,

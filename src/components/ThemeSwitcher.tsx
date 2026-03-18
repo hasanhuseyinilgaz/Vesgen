@@ -12,19 +12,58 @@ export default function ThemeSwitcher() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const scrollLeft = useRef(0);
+
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
 
-    const handleNativeWheel = (e: WheelEvent) => {
+    const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      el.scrollLeft += e.deltaY;
+      // Yavaşlatılmış ve yumuşak kaydırma
+      el.scrollBy({ left: e.deltaY * 0.3, behavior: "smooth" });
     };
 
-    el.addEventListener("wheel", handleNativeWheel, { passive: false });
+    const handleMouseDown = (e: MouseEvent) => {
+      isDragging.current = true;
+      startX.current = e.pageX - el.offsetLeft;
+      scrollLeft.current = el.scrollLeft;
+      el.style.cursor = "grabbing";
+    };
+
+    const handleMouseLeave = () => {
+      isDragging.current = false;
+      el.style.cursor = "grab";
+    };
+
+    const handleMouseUp = () => {
+      isDragging.current = false;
+      el.style.cursor = "grab";
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      e.preventDefault();
+      const x = e.pageX - el.offsetLeft;
+      const walk = (x - startX.current) * 2; // Scroll-fast
+      el.scrollLeft = scrollLeft.current - walk;
+    };
+
+    el.style.cursor = "grab";
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("mousedown", handleMouseDown);
+    el.addEventListener("mouseleave", handleMouseLeave);
+    el.addEventListener("mouseup", handleMouseUp);
+    el.addEventListener("mousemove", handleMouseMove);
 
     return () => {
-      el.removeEventListener("wheel", handleNativeWheel);
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("mousedown", handleMouseDown);
+      el.removeEventListener("mouseleave", handleMouseLeave);
+      el.removeEventListener("mouseup", handleMouseUp);
+      el.removeEventListener("mousemove", handleMouseMove);
     };
   }, []);
 
@@ -86,7 +125,7 @@ export default function ThemeSwitcher() {
 
       <div
         ref={scrollContainerRef}
-        className="flex items-center gap-2 overflow-x-auto flex-nowrap scroll-smooth flex-1 py-3 px-1"
+        className="flex items-center gap-2 overflow-x-auto flex-nowrap flex-1 py-3 px-2 select-none"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         <style>{`

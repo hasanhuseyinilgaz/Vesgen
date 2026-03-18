@@ -54,13 +54,21 @@
     "unknownError": "Bilinmeyen bir hata."
   },
   "queries": {
-    "title": "Sorgu Konsolu",
+    "title": "Sorgular",
+    "pageTitle": "Sorgu Konsolu",
+    "pageDescription": "Özel SQL sorguları oluşturun, çalıştırın ve sonuçları inceleyin.",
+    "activeQuery": "Aktif Sekme",
+    "statusBadge": "DURUM",
+    "activeQueryNone": "Hiçbiri",
     "newQuery": "Yeni Sorgu",
-    "modified": "Değiştirildi",
-    "overwrite": "Üstüne Yaz",
-    "deleteQueryTitle": "Sorguyu Sil",
-    "save": "Kaydet",
+    "modified": "DEĞİŞTİRİLDİ",
+    "overwrite": "Kaydet",
+    "deleteQueryTitle": "Sil",
+    "save": "Farklı Kaydet",
+    "saveAs": "Farklı Kaydet",
     "run": "Çalıştır",
+    "closeTab": "Sekmeyi Kapat (Ctrl + W)",
+    "newQueryShortcut": "Yeni Sekme (Ctrl + T)",
     "editorPlaceholder": "-- SELECT * FROM ...",
     "querySuccess": "Sorgu Başarıyla Çalıştırıldı",
     "rowsAffected": "Etkilenen: {{count}} satır",
@@ -82,10 +90,21 @@
     "updateAuthTitle": "Sorgu Güncelleme İzni",
     "updateAuthDesc": "Mevcut bir hazır sorgunun kodlarını değiştirmek için yönetici onayı gereklidir.",
     "deleteAuthTitle": "Sorgu Silme İzni",
-    "deleteAuthDesc": "Sistemden bir hazır sorguyu kalıcı olarak silmek için yönetici onayı gereklidir."
+    "deleteAuthDesc": "Sistemden bir hazır sorguyu kalıcı olarak silmek için yönetici onayı gereklidir.",
+    "unsavedChangesTitle": "Kaydedilmemiş Değişiklikler",
+    "unsavedChangesDesc": "<strong>{{name}}</strong> isimli sekmede kaydedilmemiş değişiklikleriniz var. Kaydetmek ister misiniz?",
+    "closeWithoutSaving": "Kaydetmeden Kapat",
+    "saveChanges": "Değişiklikleri Kaydet",
+    "newTabPlaceholder": "Yeni bir sorgu sekmesi açın veya sol menüden seçin.",
+    "defaultNewQueryName": "Sorgu ",
+    "saveShortcutHint": "Kaydet (Ctrl + S)",
+    "saveAsShortcutHint": "Farklı Kaydet (Ctrl + S)"
   },
   "tables": {
     "title": "Tablolar",
+    "pageTitle": "Tablo Yönetimi",
+    "pageDescription": "Veritabanı tablolarını listeleyin, verileri filtreleyin ve ilişkileri inceleyin.",
+    "activeTable": "Aktif Tablo",
     "readyToView": "Görüntülemeye Hazır",
     "selectToStart": "Sol menüden bir tablo seçerek başlayın.",
     "tabData": "Tablo Verisi",
@@ -96,6 +115,9 @@
   },
   "views": {
     "title": "Görünümler",
+    "pageTitle": "Görünüm Yönetimi",
+    "pageDescription": "Veritabanı görünümlerini (view) listeleyin, verileri analiz edin ve SQL tanımlarını inceleyin.",
+    "activeView": "Aktif Görünüm",
     "readyToView": "Görüntülemeye Hazır",
     "selectToStart": "Sol menüden incelemek istediğiniz View'i seçin.",
     "tabData": "Veri Görünümü",
@@ -106,6 +128,9 @@
   },
   "procedures": {
     "title": "Saklı Yordamlar",
+    "pageTitle": "Stored Procedure Yönetimi",
+    "pageDescription": "Veritabanı saklı yordamlarını listeleyin, parametrelerini yönetin ve güvenli bir şekilde çalıştırın.",
+    "activeSP": "Aktif Yordam",
     "definitionNotFound": "Tanım bulunamadı.",
     "dangerousOpWarning": "Bu stored procedure veriyi değiştiren veya silen tehlikeli bir komut içeriyor. Devam etmek istediğinizden emin misiniz?",
     "executionFailed": "SP çalıştırılamadı.",
@@ -125,7 +150,16 @@
     "selectToStart": "Sol menüden incelemek veya çalıştırmak istediğiniz Saklı Yordamı (SP) seçin.",
     "dangerousOpTitle": "Tehlikeli İşlem Uyarısı",
     "cancel": "İptal Et",
-    "runAnyway": "Yine de Çalıştır"
+    "runAnyway": "Yine de Çalıştır",
+    "save": "Kaydet",
+    "saveSuccess": "Parametreler başarıyla kaydedildi!",
+    "saveError": "Kaydetme işlemi başarısız oldu.",
+    "systemErrorSave": "Sistem Hatası: Kaydetme işlemi sırasında çöktü!",
+    "update": "Güncelle",
+    "delete": "Sil",
+    "deleteSuccess": "Kayıtlı parametreler silindi.",
+    "deleteError": "Silme işlemi başarısız oldu.",
+    "systemErrorDelete": "Silme işlemi sırasında bir hata oluştu."
   },
   "jobs": {
     "title": "SQL Görev Yönetimi",
@@ -192,6 +226,7 @@
   },
   "activity": {
     "title": "Sistem Monitörü",
+    "description": "Sunucu performansını ve aktif işlemleri anlık olarak takip edin.",
     "activeSessions": "Aktif Session",
     "cpuUsage": "SQL CPU Kullanımı",
     "diskUsage": "Disk Doluluğu",
@@ -280,6 +315,14 @@
     "statsLoadError": "İstatistikler yüklenirken hata:"
   },
   "components": {
+    "columnManager": {
+      "title": "Sütunları Yönet",
+      "columns": "Sütunlar",
+      "manageColumns": "Sütunları Yönet",
+      "reset": "Görünümü Sıfırla",
+      "searchPlaceholder": "Sütunlarda ara...",
+      "noResults": "Sütun bulunamadı."
+    },
     "livePanel": {
       "title": "Canlı Veri İzleme",
       "description": "Tablo verileri belirlenen aralıklarla arka planda otomatik güncellenir. Güvenlik amacıyla <b>10 dakika</b> sonra durdurulur.",
@@ -293,6 +336,8 @@
     },
     "dataTable": {
       "noData": "Veri bulunamadı.",
+      "searchPlaceholder": "Tablo içinde hızlı ara...",
+      "quickSearch": "Sayfa içinde hızlı ara...",
       "totalRecords": "Toplam",
       "records": "kayıt",
       "rowsPerPage": "Satır/Sayfa:",
@@ -331,7 +376,7 @@
       "refresh": "Yenile"
     },
     "filterPanel": {
-      "title": "Detaylı Filtreleme (AND)",
+      "title": "Detaylı Filtreleme (AND/OR)",
       "reset": "Sıfırla",
       "column": "Sütun",
       "searchColumn": "Sütun ara ve seç...",
@@ -350,8 +395,26 @@
       "endValue": "Bitiş Değeri",
       "valuePlaceholder": "Aranacak değer...",
       "endValuePlaceholder": "Bitiş değeri...",
-      "addRule": "Kural Ekle (AND)",
-      "applyFilter": "Filtreyi Uygula"
+      "addRule": "Kural Ekle",
+      "applyFilter": "Filtreyi Uygula",
+      "removeFilter": "Filtreyi Kaldır (Sıfırlamadan)",
+      "addJoin": "Bağıntı Ekle",
+      "joinsTitle": "Bağıntılar",
+      "joinType": "Bağlantı Tipi",
+      "targetTable": "Hedef Tablo",
+      "localColumn": "Yerel Kolon",
+      "targetColumn": "Hedef Kolon",
+      "selectTable": "Tablo Seç",
+      "selectColumn": "Kolon Seç",
+      "searchTable": "Tablo ara ve seç...",
+      "rulesTitle": "Gelişmiş Filtreleme (AND / OR)",
+      "panelTitle": "Filtre ve Bağıntı Seçenekleri",
+      "rulesSectionTitle": "Filtre Kuralları",
+      "emptyState": "Herhangi bir filtre eklenmedi.",
+      "validationColRequired": "Lütfen filtre kuralı için bir kolon seçiniz.",
+      "validationValRequired": "Lütfen filtre kuralı için bir değer giriniz.",
+      "validationJoinRequired": "Lütfen INNER JOIN bağıntısı için tüm alanları seçiniz.",
+      "validationEmptyRule": "Lütfen boş filtre kuralını doldurun veya silin."
     },
     "passwordModal": {
       "defaultTitle": "Yönetici İzni Gerekli",
@@ -393,7 +456,12 @@
     "loading": "Yükleniyor...",
     "error": "Hata",
     "success": "Başarılı",
-    "delete": "Sil"
+    "delete": "Sil",
+    "create": "Oluştur",
+    "saveChanges": "Değişiklikleri Kaydet",
+    "giveUp": "Vazgeç",
+    "minimize": "Küçült",
+    "expand": "Genişlet"
   },
   "settings": {
     "title": "Sistem Ayarları",
@@ -414,6 +482,12 @@
     "defaultPageSizeDesc": "Veritabanı tablolarına girildiğinde sayfa başına çekilecek ve gösterilecek kayıt sayısı. (Önerilen: 50 veya 100)",
     "lockedArea": "Kilitli Alan",
     "lockedAreaDesc": "Sistemsel ayarları değiştirmek için yönetici kilidini açın.",
+    "visualsAndGlass": "Görsel Efektler & Cam Efekti",
+    "visualsDescription": "Arka plan parıltısını ve kart saydamlıklarını buradan yönetin.",
+    "vibrancyLevel": "Parıltı Yoğunluğu (Vibrancy)",
+    "vibrancyDesc": "Arka plandaki hareketli ışığın parlaklık seviyesini ayarlar.",
+    "glassOpacity": "Cam Saydamlığı (Glass Opacity)",
+    "glassOpacityDesc": "Kartların ve panellerin arka plan geçirgenliğini belirler.",
     "adminPasswordPlaceholder": "Yönetici şifresi...",
     "verifying": "Doğrulanıyor...",
     "unlock": "Kilidi Aç",
@@ -472,6 +546,14 @@
     "areYouSure": "Emin misiniz?",
     "deleteWarning": "Ortama ait tüm veritabanı ve sunucu kayıtları kalıcı olarak silinecektir.",
     "deletePermanently": "Kalıcı Olarak Sil",
-    "deleteError": "Ortam silinirken bir hata oluştu."
+    "deleteError": "Ortam silinirken bir hata oluştu.",
+    "createSuccess": "Ortam başarıyla oluşturuldu.",
+    "createError": "Ortam oluşturulamadı. Logları kontrol edin.",
+    "systemErrorCreation": "Sistem Hatası: İşlem arka planda çöktü!",
+    "updateSuccess": "Değişiklikler başarıyla kaydedildi.",
+    "updateError": "Güncelleme işlemi başarısız oldu.",
+    "systemErrorUpdate": "Sistem Hatası: Güncelleme yapılamadı!",
+    "deleteSuccess": "Ortam sistemden başarıyla silindi.",
+    "systemErrorDeletion": "Sistem Hatası: Silme işlemi sırasında çökme yaşandı!"
   }
 }

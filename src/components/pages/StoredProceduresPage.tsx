@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   FileCode2,
   Database,
   CheckCircle,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +35,7 @@ import SqlCodeViewer from "@/components/SqlCodeViewer";
 import EmptyState from "@/components/EmptyState";
 import SearchableSidebar from "@/components/SearchableSidebar";
 import CustomTabs from "@/components/CustomTabs";
-import DataToolbar from "@/components/DataToolbar";
+import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 
 import ActionTooltip from "@/components/ActionTooltip";
@@ -174,6 +176,7 @@ export default function StoredProceduresPage() {
           data: execRes.data,
           rowsAffected: execRes.rowsAffected,
         });
+        toast.success(t("procedures.operationSuccess") || "İşlem başarıyla tamamlandı.");
       } else {
         setResult({
           success: false,
@@ -186,6 +189,90 @@ export default function StoredProceduresPage() {
       setLoading(false);
     }
   };
+
+  const handleSavePreset = async () => {
+    if (!selectedSP) return;
+
+    try {
+      const spParams = parameters.map((p) => ({
+        name: p.PARAMETER_NAME,
+        value: paramValues[p.PARAMETER_NAME] || "",
+      }));
+
+      const newPreset: Preset = { spName: selectedSP, parameters: spParams };
+
+      let updatedPresets = [...presets];
+      const existingIndex = updatedPresets.findIndex(p => p.spName === selectedSP);
+
+      if (existingIndex >= 0) {
+        updatedPresets[existingIndex] = newPreset;
+      } else {
+        updatedPresets.push(newPreset);
+      }
+
+      setPresets(updatedPresets);
+
+      if ((window as any).electronAPI?.fsSavePresets) {
+        const res = await (window as any).electronAPI.fsSavePresets(updatedPresets);
+        if (res?.success) {
+          toast.success(t("procedures.saveSuccess") || "Parametreler başarıyla kaydedildi!");
+        } else {
+          toast.error(t("procedures.saveError") || "Kaydetme işlemi başarısız oldu.");
+        }
+      }
+    } catch (error) {
+      console.error("Preset kaydetme hatası:", error);
+      toast.error(t("procedures.systemErrorSave") || "Kaydetme işlemi sırasında bir hata oluştu.");
+    }
+  };
+
+  const handleDeletePreset = async () => {
+    if (!selectedSP) return;
+
+    try {
+      const updatedPresets = presets.filter((p) => p.spName !== selectedSP);
+      setPresets(updatedPresets);
+
+      // Optionally clear paramValues or reset to empty
+      const clearedValues: Record<string, any> = {};
+      parameters.forEach((p) => {
+        clearedValues[p.PARAMETER_NAME] = "";
+      });
+      setParamValues(clearedValues);
+
+      if ((window as any).electronAPI?.fsSavePresets) {
+        const res =
+          await (window as any).electronAPI.fsSavePresets(updatedPresets);
+        if (res?.success) {
+          toast.success(
+            t("procedures.deleteSuccess") || "Kayıtlı parametreler silindi.",
+          );
+        } else {
+          toast.error(
+            t("procedures.deleteError") || "Silme işlemi başarısız oldu.",
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Preset silme hatası:", error);
+      toast.error(
+        t("procedures.systemErrorDelete") ||
+          "Silme işlemi sırasında bir hata oluştu.",
+      );
+    }
+  };
+
+  const currentPreset = presets.find((p) => p.spName === selectedSP);
+  const hasChanges = parameters.some((p) => {
+    const presetVal =
+      currentPreset?.parameters.find((cp) => cp.name === p.PARAMETER_NAME)
+        ?.value || "";
+    return String(paramValues[p.PARAMETER_NAME] || "") !== String(presetVal);
+  });
+  const allFieldsFilled = parameters.every((p) => {
+    const val = paramValues[p.PARAMETER_NAME];
+    return val !== undefined && val !== null && String(val).trim() !== "";
+  });
 
   const handleExportExcel = () => {
     if (!result?.data?.length) return;
@@ -230,39 +317,47 @@ export default function StoredProceduresPage() {
         />
       }
     >
-      <div
-        className={cn(
-          "h-full bg-background custom-scrollbar",
-          activeTab === "execute"
-            ? "overflow-y-auto"
-            : "overflow-hidden flex flex-col",
-        )}
-      >
-        {selectedSP ? (
-          <div
-            className={cn(
-              "p-6 flex flex-col gap-6",
-              activeTab === "code" && "flex-1 overflow-hidden",
-            )}
-          >
-            <div className="flex flex-col gap-0 shrink-0">
-              <DataToolbar
-                title={selectedSP}
-                onRefresh={handleExecuteInitiate}
-                loading={loading}
-                showLimitSelector={false}
-                showFilterButton={false}
-                showRecordCount={!!result?.data}
-                recordCount={result?.data?.length || 0}
-                showRefreshButton={false}
-                onExport={handleExportExcel}
-              />
+      <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+        <div
+          className={cn(
+            "flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full",
+            activeTab === "code" ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden custom-scrollbar",
+          )}
+        >
+          <PageHeader
+            title={t("procedures.pageTitle")}
+            icon={Settings}
+            description={t("procedures.pageDescription")}
+            badges={selectedSP ? [
+              {
+                label: t("procedures.activeSP"),
+                value: selectedSP,
+              },
+              {
+                label: "MODE",
+                value: activeTab === "execute" 
+                  ? t("procedures.tabExecute").toUpperCase()
+                  : t("procedures.tabCode").toUpperCase(),
+              },
+            ] : undefined}
+            recordCount={result?.data?.length || 0}
+            onRefresh={selectedSP ? handleExecuteInitiate : undefined}
+            loading={loading}
+            showLimitSelector={false}
+            showFilterButton={false}
+            showRecordCount={!!selectedSP && !!result?.data}
+            showRefreshButton={false}
+            onExport={selectedSP && result?.data ? handleExportExcel : undefined}
+          />
+
+          {selectedSP ? (
+            <>
               {isDangerousOperation(spDefinition) && (
                 <ActionTooltip
                   label={t("procedures.dangerousOpWarning")}
                   side="right"
                 >
-                  <div className="flex items-center space-x-1.5 text-warning mt-2 px-2 bg-warning/10 py-1.5 rounded-md border border-warning/20 cursor-help w-max">
+                  <div className="flex items-center space-x-1.5 text-warning mt-[-16px] px-2 bg-warning/10 py-1.5 rounded-md border border-warning/20 cursor-help w-max">
                     <AlertTriangle className="h-4 w-4" />
                     <span className="text-xs font-medium">
                       {t("procedures.dangerousOpBadge")}
@@ -270,7 +365,6 @@ export default function StoredProceduresPage() {
                   </div>
                 </ActionTooltip>
               )}
-            </div>
 
             <CustomTabs
               activeTab={activeTab}
@@ -334,7 +428,32 @@ export default function StoredProceduresPage() {
                         </div>
                       )}
 
-                      <div className="pt-6 mt-6 border-t flex justify-end">
+                      <div className="pt-6 mt-6 border-t flex justify-end gap-3">
+                        {parameters.length > 0 && (
+                          <>
+                            {currentPreset && (
+                              <Button
+                                variant="ghost"
+                                onClick={handleDeletePreset}
+                                className="w-full sm:w-auto text-destructive hover:text-destructive hover:bg-destructive/10 font-semibold transition-colors"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {t("procedures.delete") || "Sil"}
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              onClick={handleSavePreset}
+                              disabled={!allFieldsFilled || !hasChanges}
+                              className="w-full sm:w-auto font-semibold shadow-sm"
+                            >
+                              <Database className="mr-2 h-4 w-4" />
+                              {currentPreset
+                                ? t("procedures.update") || "Güncelle"
+                                : t("procedures.save") || "Kaydet"}
+                            </Button>
+                          </>
+                        )}
                         <Button
                           onClick={handleExecuteInitiate}
                           disabled={loading}
@@ -429,16 +548,17 @@ export default function StoredProceduresPage() {
                 </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <EmptyState
-              icon={Settings}
-              title={t("procedures.readyToRun")}
-              description={t("procedures.selectToStart")}
-            />
-          </div>
-        )}
+          </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center -mt-20 w-full">
+              <EmptyState
+                icon={Settings}
+                title={t("procedures.readyToRun")}
+                description={t("procedures.selectToStart")}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <AlertDialog

@@ -33,6 +33,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import PasswordModal from "@/components/PasswordModal";
+import PageHeader from "@/components/PageHeader";
 
 import { useAuthGate } from "@/hooks/useAuthGate";
 import {
@@ -327,26 +328,24 @@ export default function DatabaseMaintenancePage() {
   };
 
   return (
-    <div className="flex h-screen bg-background flex-col w-full relative z-0">
-      <div className="p-6 pb-2 border-b bg-muted/10 shrink-0">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-primary/10 text-primary rounded-xl">
-            <HeartPulse className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              {t("maintenance.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {t("maintenance.description")}
-            </p>
-          </div>
-        </div>
+    <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+      <PageHeader
+        title={t("maintenance.title")}
+        icon={HeartPulse}
+        description={t("maintenance.description")}
+        showRefreshButton={false}
+        className="mx-6 mt-6"
+      />
+      <div className="px-6 py-4 shrink-0 bg-transparent">
         <CustomTabs
           activeTab={activeTab}
           onTabChange={(tab) => setActiveTab(tab as any)}
           tabs={[
-            { value: "indexes", label: t("maintenance.tabIndexes"), icon: Zap },
+            {
+              value: "indexes",
+              label: t("maintenance.tabIndexes"),
+              icon: Zap,
+            },
             {
               value: "logs",
               label: t("maintenance.tabLogs"),
@@ -361,7 +360,7 @@ export default function DatabaseMaintenancePage() {
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 bg-muted/5 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6 custom-scrollbar min-h-0 min-w-0">
         {activeTab === "indexes" && (
           <div className="flex flex-col gap-6 w-full">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -993,26 +992,26 @@ export default function DatabaseMaintenancePage() {
                                 <CalendarClock className="w-3.5 h-3.5 mr-2 opacity-50" />
                                 {stat.LastUpdated
                                   ? (() => {
-                                      try {
-                                        const dateStr =
-                                          typeof stat.LastUpdated === "string"
-                                            ? stat.LastUpdated
-                                            : new Date(
-                                                stat.LastUpdated,
-                                              ).toISOString();
-                                        return new Date(
-                                          dateStr.replace("Z", ""),
-                                        ).toLocaleString("tr-TR", {
-                                          year: "numeric",
-                                          month: "short",
-                                          day: "numeric",
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        });
-                                      } catch (e) {
-                                        return t("maintenance.dateParseError");
-                                      }
-                                    })()
+                                    try {
+                                      const dateStr =
+                                        typeof stat.LastUpdated === "string"
+                                          ? stat.LastUpdated
+                                          : new Date(
+                                            stat.LastUpdated,
+                                          ).toISOString();
+                                      return new Date(
+                                        dateStr.replace("Z", ""),
+                                      ).toLocaleString("tr-TR", {
+                                        year: "numeric",
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      });
+                                    } catch (e) {
+                                      return t("maintenance.dateParseError");
+                                    }
+                                  })()
                                   : t("maintenance.neverUpdated")}
                               </div>
                             </td>
@@ -1163,9 +1162,9 @@ export default function DatabaseMaintenancePage() {
           </DialogHeader>
           <div className="py-4">
             {resultModal.success &&
-            resultModal.targetName &&
-            resultModal.action !== t("maintenance.statUpdateAction") &&
-            resultModal.action !== t("maintenance.allStatsUpdateAction") ? (
+              resultModal.targetName &&
+              resultModal.action !== t("maintenance.statUpdateAction") &&
+              resultModal.action !== t("maintenance.allStatsUpdateAction") ? (
               <div className="flex flex-col gap-3 bg-muted/30 p-4 rounded-lg border">
                 <div className="flex justify-between items-center border-b pb-2">
                   <span className="text-sm text-muted-foreground">

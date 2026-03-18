@@ -54,13 +54,21 @@
     "unknownError": "An unknown error occurred."
   },
   "queries": {
-    "title": "Query Console",
+    "title": "Queries",
+    "pageTitle": "Query Console",
+    "pageDescription": "Create, run and analyze custom SQL queries.",
+    "activeQuery": "Active Tab",
+    "statusBadge": "STATUS",
+    "activeQueryNone": "None",
     "newQuery": "New Query",
-    "modified": "Modified",
-    "overwrite": "Overwrite",
-    "deleteQueryTitle": "Delete Query",
-    "save": "Save",
+    "modified": "MODIFIED",
+    "overwrite": "Save",
+    "deleteQueryTitle": "Delete",
+    "save": "Save As",
+    "saveAs": "Save As",
     "run": "Run",
+    "closeTab": "Close Tab (Ctrl + W)",
+    "newQueryShortcut": "New Tab (Ctrl + T)",
     "editorPlaceholder": "-- SELECT * FROM ...",
     "querySuccess": "Query Executed Successfully",
     "rowsAffected": "Affected: {{count}} rows",
@@ -82,11 +90,22 @@
     "updateAuthTitle": "Query Update Permission",
     "updateAuthDesc": "Admin approval is required to modify the code of an existing saved query.",
     "deleteAuthTitle": "Query Deletion Permission",
-    "deleteAuthDesc": "Admin approval is required to permanently delete a saved query from the system."
+    "deleteAuthDesc": "Admin approval is required to permanently delete a saved query from the system.",
+    "unsavedChangesTitle": "Unsaved Changes",
+    "unsavedChangesDesc": "You have unsaved changes in the tab <strong>{{name}}</strong>. Do you want to save them?",
+    "closeWithoutSaving": "Close Without Saving",
+    "saveChanges": "Save Changes",
+    "newTabPlaceholder": "Open a new query tab or select from the left menu.",
+    "defaultNewQueryName": "Query ",
+    "saveShortcutHint": "Save (Ctrl + S)",
+    "saveAsShortcutHint": "Save As (Ctrl + S)"
   },
   "tables": {
     "title": "Tables",
-    "readyToView": "Ready to View",
+    "pageTitle": "Table Management",
+    "pageDescription": "List database tables, filter data and inspect relationships.",
+    "activeTable": "Active Table",
+    "readyToTable": "Ready to Table",
     "selectToStart": "Select a table from the left menu to start.",
     "tabData": "Table Data",
     "tabSchema": "Schema & Relations",
@@ -96,6 +115,9 @@
   },
   "views": {
     "title": "Views",
+    "pageTitle": "View Management",
+    "pageDescription": "List database views, analyze data and inspect SQL definitions.",
+    "activeView": "Active View",
     "readyToView": "Ready to View",
     "selectToStart": "Select a View from the left menu to inspect.",
     "tabData": "Data View",
@@ -106,6 +128,9 @@
   },
   "procedures": {
     "title": "Stored Procedures",
+    "pageTitle": "Stored Procedure Management",
+    "pageDescription": "List database stored procedures, manage parameters and execute safely.",
+    "activeSP": "Active Procedure",
     "definitionNotFound": "Definition not found.",
     "dangerousOpWarning": "This stored procedure contains a dangerous command that modifies or deletes data. Are you sure you want to continue?",
     "executionFailed": "Failed to execute SP.",
@@ -125,7 +150,16 @@
     "selectToStart": "Select a Stored Procedure from the left menu to inspect or execute.",
     "dangerousOpTitle": "Dangerous Operation Warning",
     "cancel": "Cancel",
-    "runAnyway": "Run Anyway"
+    "runAnyway": "Run Anyway",
+    "save": "Save",
+    "saveSuccess": "Parameters saved successfully!",
+    "saveError": "Save operation failed.",
+    "systemErrorSave": "System Error: Crashed during save operation!",
+    "update": "Update",
+    "delete": "Delete",
+    "deleteSuccess": "Saved parameters deleted successfully.",
+    "deleteError": "Failed to delete parameters.",
+    "systemErrorDelete": "System Error: An error occurred during deletion."
   },
   "jobs": {
     "title": "SQL Job Management",
@@ -192,6 +226,7 @@
   },
   "activity": {
     "title": "Activity Monitor",
+    "description": "Monitor server performance and active processes in real-time.",
     "activeSessions": "Active Sessions",
     "cpuUsage": "SQL CPU Usage",
     "diskUsage": "Disk Usage",
@@ -280,6 +315,14 @@
     "statsLoadError": "Error loading statistics:"
   },
   "components": {
+    "columnManager": {
+      "title": "Manage Columns",
+      "columns": "Columns",
+      "manageColumns": "Manage Columns",
+      "reset": "Reset View",
+      "searchPlaceholder": "Search columns...",
+      "noResults": "No columns found."
+    },
     "livePanel": {
       "title": "Live Data Monitoring",
       "description": "Table data is updated automatically in the background at set intervals. It will be stopped after <b>10 minutes</b> for security reasons.",
@@ -293,12 +336,14 @@
     },
     "dataTable": {
       "noData": "No data found.",
+      "searchPlaceholder": "Quick search in table...",
+      "quickSearch": "Quick search in page...",
       "totalRecords": "Total",
       "records": "records",
       "rowsPerPage": "Rows/Page:",
       "rowDetailsTitleEdit": "Row Details & Editing",
       "rowDetailsTitleInfo": "Row Details",
-      "viewingContent": "Viewing <span class='font-semibold text-foreground'>{{title}}</span> content.",
+      "viewingContent": "You are viewing <span class='font-semibold text-foreground'>{{title}}</span> content.",
       "editInstruction": "You can change the boxes to update the data.",
       "infoInstruction": "You can see all column data for this record below.",
       "primaryKeyTooltip": "Primary Key (Cannot be changed)",
@@ -331,7 +376,7 @@
       "refresh": "Refresh"
     },
     "filterPanel": {
-      "title": "Advanced Filtering (AND)",
+      "title": "Advanced Filtering (AND/OR)",
       "reset": "Reset",
       "column": "Column",
       "searchColumn": "Search and select column...",
@@ -350,8 +395,26 @@
       "endValue": "End Value",
       "valuePlaceholder": "Value to search...",
       "endValuePlaceholder": "End value...",
-      "addRule": "Add Rule (AND)",
-      "applyFilter": "Apply Filter"
+      "addRule": "Add Rule",
+      "applyFilter": "Apply Filter",
+      "removeFilter": "Remove Filter (Without Reset)",
+      "addJoin": "Add Join",
+      "joinsTitle": "Joins",
+      "joinType": "Join Type",
+      "targetTable": "Target Table",
+      "localColumn": "Local Column",
+      "targetColumn": "Target Column",
+      "selectTable": "Select Table",
+      "selectColumn": "Select Column",
+      "searchTable": "Search and select table...",
+      "rulesTitle": "Advanced Filtering (AND / OR)",
+      "panelTitle": "Filter and Join Options",
+      "rulesSectionTitle": "Filter Rules",
+      "emptyState": "No filters added.",
+      "validationColRequired": "Please select a column for the filter rule.",
+      "validationValRequired": "Please enter a value for the filter rule.",
+      "validationJoinRequired": "Please select all fields for the INNER JOIN.",
+      "validationEmptyRule": "Please fill or delete the empty filter rule."
     },
     "passwordModal": {
       "defaultTitle": "Admin Permission Required",
@@ -364,8 +427,8 @@
       "confirm": "Confirm"
     },
     "searchableSidebar": {
-      "searchPlaceholder": "Ara...",
-      "noResults": "Sonuç bulunamadı."
+      "searchPlaceholder": "Search...",
+      "noResults": "No results found."
     },
     "sqlCodeViewer": {
       "table": "Table",
@@ -381,7 +444,7 @@
       "amethyst": "Amethyst",
       "ocean": "Ocean",
       "nord": "Nord",
-      "tokyo": "Tokyo Gecesi",
+      "tokyo": "Tokyo Night",
       "vanta": "Zero Carbon",
       "sunset": "Sunset"
     }
@@ -393,7 +456,12 @@
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
-    "delete": "Delete"
+    "delete": "Delete",
+    "create": "Create",
+    "saveChanges": "Save Changes",
+    "giveUp": "Give Up",
+    "minimize": "Minimize",
+    "expand": "Expand"
   },
   "settings": {
     "title": "System Settings",
@@ -414,6 +482,12 @@
     "defaultPageSizeDesc": "Number of records fetched and displayed per page in database tables. (Recommended: 50 or 100)",
     "lockedArea": "Locked Area",
     "lockedAreaDesc": "Unlock the admin lock to change system settings.",
+    "visualsAndGlass": "Visuals & Glassmorphism",
+    "visualsDescription": "Customize backgrounds, glow effects and transparency levels.",
+    "vibrancyLevel": "Glow Intensity (Vibrancy)",
+    "vibrancyDesc": "Adjusts the brightness of background glow spots.",
+    "glassOpacity": "Glass Transparency",
+    "glassOpacityDesc": "Controls the background opacity of glass-styled cards.",
     "adminPasswordPlaceholder": "Admin password...",
     "verifying": "Verifying...",
     "unlock": "Unlock",
@@ -472,6 +546,14 @@
     "areYouSure": "Are you sure?",
     "deleteWarning": "All database and server records belonging to this workspace will be permanently deleted.",
     "deletePermanently": "Delete Permanently",
-    "deleteError": "An error occurred while deleting the workspace."
+    "deleteError": "An error occurred while deleting the workspace.",
+    "createSuccess": "Workspace created successfully.",
+    "createError": "Workspace could not be created. Check logs.",
+    "systemErrorCreation": "System Error: Process crashed in the background!",
+    "updateSuccess": "Changes saved successfully.",
+    "updateError": "Update operation failed.",
+    "systemErrorUpdate": "System Error: Update failed!",
+    "deleteSuccess": "Workspace deleted successfully from the system.",
+    "systemErrorDeletion": "System Error: Exception during deletion!"
   }
 }

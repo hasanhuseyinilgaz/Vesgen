@@ -18,7 +18,7 @@ import SqlCodeViewer from "@/components/SqlCodeViewer";
 import EmptyState from "@/components/EmptyState";
 import SearchableSidebar from "@/components/SearchableSidebar";
 import CustomTabs from "@/components/CustomTabs";
-import DataToolbar from "@/components/DataToolbar";
+import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
 
@@ -55,6 +55,7 @@ export default function ViewsPage() {
     topRows,
     setTopRows,
     activeWhereClause,
+    activeJoins,
     sortConfig,
     showFilter,
     setShowFilter,
@@ -78,7 +79,14 @@ export default function ViewsPage() {
     if (selectedView) {
       loadViewDefinition(selectedView);
     }
-  }, [selectedView]);
+
+    // Görünüm (View) verisinden çıkıldığında panelleri kapat ve canlı izlemeyi durdur
+    if (activeTab !== "data") {
+      setShowFilter(false);
+      setShowLivePanel(false);
+      setIsLiveActive(false);
+    }
+  }, [selectedView, activeTab]);
 
   const loadViews = async () => {
     setLoading(true);
@@ -133,63 +141,76 @@ export default function ViewsPage() {
         />
       }
     >
-      <div
-        className={cn(
-          "h-full bg-background custom-scrollbar",
-          activeTab === "data"
-            ? "overflow-y-auto"
-            : "overflow-hidden flex flex-col",
-        )}
-      >
-        {selectedView ? (
-          <div
-            className={cn(
-              "p-6 flex flex-col gap-6",
-              activeTab === "code" && "flex-1 overflow-hidden",
-            )}
-          >
-            <div className="flex flex-col gap-0 shrink-0">
-              <DataToolbar
-                title={selectedView}
-                recordCount={viewData.length}
-                topRows={topRows}
-                onTopRowsChange={(val) => {
-                  setTopRows(val);
-                  loadViewData(selectedView, activeWhereClause, sortConfig);
-                }}
-                onRefresh={() =>
-                  loadViewData(selectedView, activeWhereClause, sortConfig)
-                }
-                showFilter={showFilter}
-                onToggleFilter={() => {
-                  setShowLivePanel(false);
-                  setShowFilter(!showFilter);
-                }}
-                isFilterActive={activeWhereClause.trim().length > 0}
-                showLiveButton={activeTab === "data"}
-                showLivePanel={showLivePanel}
-                onToggleLivePanel={() => {
-                  setShowFilter(false);
-                  setShowLivePanel(!showLivePanel);
-                }}
-                isLiveActive={isLiveActive}
-                loading={loading}
-                showRefreshButton={false}
-                onExport={handleExportExcel}
-              />
+      <div className="flex flex-col h-full bg-background overflow-hidden">
+        <div
+          className={cn(
+            "flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full",
+            activeTab === "code" ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden custom-scrollbar",
+          )}
+        >
+          <PageHeader
+            title={t("views.pageTitle")}
+            icon={Code}
+            description={t("views.pageDescription")}
+            badges={selectedView ? [
+              {
+                label: t("views.activeView"),
+                value: selectedView,
+              },
+              {
+                label: "MODE",
+                value: activeTab === "data" 
+                  ? `${viewData.length} ${t("components.dataToolbar.records").toUpperCase()}`
+                  : t("views.tabCode").toUpperCase(),
+              },
+            ] : undefined}
+            recordCount={selectedView ? viewData.length : undefined}
+            topRows={topRows}
+            onTopRowsChange={selectedView ? (val) => {
+              setTopRows(val);
+              loadViewData(selectedView, activeWhereClause, sortConfig);
+            } : undefined}
+            onRefresh={selectedView ? () =>
+              loadViewData(selectedView, activeWhereClause, sortConfig) : undefined
+            }
+            showFilter={showFilter}
+            onToggleFilter={() => {
+              setShowLivePanel(false);
+              setShowFilter(!showFilter);
+            }}
+            isFilterActive={activeWhereClause.trim().length > 0}
+            showFilterButton={!!selectedView && activeTab === "data"}
+            showLiveButton={!!selectedView && activeTab === "data"}
+            showRefreshButton={!!selectedView}
+            showLimitSelector={!!selectedView}
+            showRecordCount={!!selectedView}
+            showLivePanel={showLivePanel}
+            onToggleLivePanel={() => {
+              setShowFilter(false);
+              setShowLivePanel(!showLivePanel);
+            }}
+            isLiveActive={isLiveActive}
+            loading={loading}
+            onExport={selectedView ? handleExportExcel : undefined}
+          />
 
-              <div className={cn("mt-4", !showFilter && "hidden")}>
+          {selectedView ? (
+            <>
+              <div className={cn("mt-0", !showFilter && "hidden")}>
                 <FilterPanel
+                  tableName={selectedView}
                   columns={columnsData}
-                  onApplyFilter={(wc) =>
-                    loadViewData(selectedView, wc, sortConfig)
+                  allTables={views.map(v => ({ TABLE_NAME: v.TABLE_NAME }))}
+                  isApplied={activeWhereClause.trim().length > 0 || activeJoins.length > 0}
+                  onApplyFilter={(wc, joins) =>
+                    loadViewData(selectedView, wc, sortConfig, false, joins)
                   }
                   onClearFilter={() =>
-                    loadViewData(selectedView, "", sortConfig)
+                    loadViewData(selectedView, "", sortConfig, false, [])
                   }
                 />
               </div>
-              <div className={cn("mt-4", !showLivePanel && "hidden")}>
+              <div className={cn("mt-0", !showLivePanel && "hidden")}>
                 <LiveMonitoringPanel
                   isVisible={showLivePanel}
                   onRefresh={() =>
@@ -201,54 +222,66 @@ export default function ViewsPage() {
                     )
                   }
                   onStatusChange={setIsLiveActive}
-                  onAutoSort={() => {}}
+                  onAutoSort={() => {
+                    const primaryKeyCol = columnsData.find(
+                      (c: any) => c.IS_PRIMARY_KEY === true || c.IS_PRIMARY_KEY === 1
+                    );
+
+                    const sortColumn = primaryKeyCol
+                      ? primaryKeyCol.COLUMN_NAME
+                      : columnsData[0]?.COLUMN_NAME;
+
+                    if (sortColumn) {
+                      handleSort(sortColumn, "DESC");
+                    }
+                  }}
                 />
               </div>
-            </div>
 
-            <CustomTabs
-              activeTab={activeTab}
-              onTabChange={setActiveTab as any}
-              tabs={[
-                { value: "data", label: t("views.tabData"), icon: Database },
-                { value: "code", label: t("views.tabCode"), icon: FileCode2 },
-              ]}
-            />
+              <CustomTabs
+                activeTab={activeTab}
+                onTabChange={setActiveTab as any}
+                tabs={[
+                  { value: "data", label: t("views.tabData"), icon: Database },
+                  { value: "code", label: t("views.tabCode"), icon: FileCode2 },
+                ]}
+              />
 
-            <div
-              className={cn(
-                "w-full",
-                activeTab === "code" ? "flex-1 min-h-0 mb-4" : "shrink-0 mb-8",
-              )}
-            >
-              {activeTab === "data" ? (
-                <DataTable
-                  data={viewData}
-                  columns={columnsData.map((c: any) => ({
-                    name: c.COLUMN_NAME,
-                    type: c.DATA_TYPE,
-                    isIdentity: c.IS_IDENTITY === 1,
-                  }))}
-                  title={selectedView}
-                  sortConfig={sortConfig}
-                  onSort={handleSort}
-                />
-              ) : (
-                <div className="h-full border rounded-xl overflow-hidden shadow-sm bg-muted/5">
-                  <SqlCodeViewer code={viewDefinition} wordWrap="off" />
-                </div>
-              )}
+              <div
+                className={cn(
+                  "w-full flex-1 min-h-0",
+                  activeTab === "data" ? "mb-8 shrink-0 h-auto" : "mb-4",
+                )}
+              >
+                {activeTab === "data" ? (
+                  <DataTable
+                    data={viewData}
+                    columns={columnsData.map((c: any) => ({
+                      name: c.COLUMN_NAME,
+                      type: c.DATA_TYPE,
+                      isIdentity: c.IS_IDENTITY === 1,
+                    }))}
+                    title={selectedView}
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                  />
+                ) : (
+                  <div className="h-full border rounded-xl overflow-hidden shadow-sm bg-muted/5">
+                    <SqlCodeViewer code={viewDefinition} wordWrap="off" />
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center -mt-20 w-full">
+              <EmptyState
+                icon={Code}
+                title={t("views.readyToView")}
+                description={t("views.selectToStart")}
+              />
             </div>
-          </div>
-        ) : (
-          <div className="h-full w-full flex items-center justify-center">
-            <EmptyState
-              icon={Code}
-              title={t("views.readyToView")}
-              description={t("views.selectToStart")}
-            />
-          </div>
-        )}
+          )}
+        </div>
 
         <Dialog
           open={updateResultModal.isOpen}

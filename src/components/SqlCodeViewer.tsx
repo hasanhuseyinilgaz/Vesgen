@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Editor, { OnMount, useMonaco } from "@monaco-editor/react";
 import { useTheme } from "@/components/ThemeProvider";
+import { getThemeColorHex } from "@/lib/utils";
 
 interface SqlCodeViewerProps {
   code: string;
@@ -39,47 +40,68 @@ export default function SqlCodeViewer({
 
   const { theme } = useTheme();
 
+  const applyMonacoTheme = (monacoInstance: any) => {
+    const bgColor = getThemeColorHex("--card");
+    const fgColor = getThemeColorHex("--foreground");
+    const primary = getThemeColorHex("--primary").replace("#", "");
+    const success = getThemeColorHex("--success").replace("#", "");
+    const warning = getThemeColorHex("--warning").replace("#", "");
+    const info = getThemeColorHex("--info").replace("#", "");
+    const mutedFg = getThemeColorHex("--muted-foreground").replace("#", "");
+
+    // Kaba bir parlaklık hesabı: (R*299 + G*587 + B*114) / 1000
+    const hex = bgColor.replace("#", "");
+    const r = parseInt(hex.substring(0, 2), 16) || 0;
+    const g = parseInt(hex.substring(2, 4), 16) || 0;
+    const b = parseInt(hex.substring(4, 6), 16) || 0;
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    const isDarkBg = brightness < 128;
+
+    monacoInstance.editor.defineTheme("vesgen-chameleon", {
+      base: isDarkBg ? "vs-dark" : "vs",
+      inherit: true,
+      rules: [
+        { token: "keyword", foreground: primary, fontStyle: "bold" },
+        { token: "string", foreground: success },
+        { token: "number", foreground: warning },
+        { token: "comment", foreground: mutedFg, fontStyle: "italic" },
+        { token: "type", foreground: info },
+        { token: "identifier", foreground: fgColor.replace("#", "") },
+        { token: "operator", foreground: mutedFg },
+      ],
+      colors: {
+        "editor.background": bgColor,
+        "editorSuggestWidget.background": bgColor,
+        "editorStickyScroll.background": bgColor,
+        "editor.foreground": fgColor,
+        ...(isDarkBg
+          ? {
+            "editorLineNumber.foreground": "#64748b",
+            "editor.lineHighlightBackground": "#ffffff0A",
+            "editor.selectionBackground": "#ffffff1A",
+          }
+          : {
+            "editorLineNumber.foreground": "#94a3b8",
+            "editor.lineHighlightBackground": "#0000000A",
+            "editor.selectionBackground": "#0000001A",
+          }),
+      },
+    });
+
+    if (monacoInstance.editor.setTheme) {
+      monacoInstance.editor.setTheme("vesgen-chameleon");
+    }
+  };
+
+  const handleBeforeMount = (monaco: any) => {
+    applyMonacoTheme(monaco);
+  };
+
   useEffect(() => {
     if (monaco) {
-      monaco.editor.defineTheme("app-transparent-light", {
-        base: "vs",
-        inherit: true,
-        rules: [
-          { token: "keyword", foreground: "0000ff", fontStyle: "bold" },
-          { token: "string", foreground: "a31515" },
-          { token: "number", foreground: "098658" },
-          { token: "comment", foreground: "008000", fontStyle: "italic" },
-          { token: "type", foreground: "2b91af" },
-          { token: "identifier", foreground: "001080" },
-        ],
-        colors: {
-          "editor.background": "#00000000",
-          "editor.lineHighlightBackground": "#0000000A",
-          "editor.selectionBackground": "#0000001A",
-        },
-      });
-
-      monaco.editor.defineTheme("app-transparent-dark", {
-        base: "vs-dark",
-        inherit: true,
-        rules: [
-          { token: "keyword", foreground: "c792ea", fontStyle: "italic" },
-          { token: "string", foreground: "ecc48d" },
-          { token: "number", foreground: "f78c6c" },
-          { token: "comment", foreground: "637777", fontStyle: "italic" },
-          { token: "type", foreground: "addb67" },
-          { token: "identifier", foreground: "82aaff" },
-          { token: "operator", foreground: "c792ea" },
-        ],
-        colors: {
-          "editor.background": "#00000000",
-          "editorLineNumber.foreground": "#64748b",
-          "editor.lineHighlightBackground": "#ffffff0A",
-          "editor.selectionBackground": "#ffffff1A",
-        },
-      });
+      setTimeout(() => applyMonacoTheme(monaco), 10);
     }
-  }, [monaco]);
+  }, [monaco, theme]);
 
   useEffect(() => {
     if (!monaco) return;
@@ -221,21 +243,17 @@ export default function SqlCodeViewer({
     }
   }, [monaco, errorLine, errorMessage, code]);
 
-  const activeMonacoTheme =
-    theme === "light" ? "app-transparent-light" : "app-transparent-dark";
-
   return (
-    <div
-      className={`w-full h-full overflow-hidden rounded-xl border shadow-sm transition-all duration-300 ${
-        isFocused ? "ring-2 ring-primary/30 border-primary" : "border-border"
-      } bg-card`}
-    >
+    // 🚀 DÜZELTME: rounded-xl ve border kaldırıldı. "rounded-none h-full w-full" yapıldı ki sekme alanıyla tam öpüşsün. 
+    // Odaklanma (ring) efekti de iptal edildi çünkü dış kutu zaten şık.
+    <div className={`w-full h-full overflow-hidden rounded-none transition-all duration-300`}>
       <Editor
         height="100%"
         defaultLanguage="sql"
         value={code}
-        theme={activeMonacoTheme}
+        theme={"vesgen-chameleon"}
         onChange={onChange}
+        beforeMount={handleBeforeMount}
         onMount={handleMount}
         options={{
           readOnly: readOnly,

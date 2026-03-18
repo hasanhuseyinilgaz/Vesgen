@@ -36,7 +36,7 @@ export function useSettings() {
       JSON.stringify(originalConfigRef.current) !== JSON.stringify(config);
 
     if (!isChanged) {
-      showMessage(t("settings.noChangesMade"), "info");
+      // Quietly return for debounced auto-save
       return;
     }
 

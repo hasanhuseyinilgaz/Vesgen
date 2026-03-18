@@ -3,11 +3,23 @@ const path = require("path");
 const sql = require("mssql");
 const Store = require("electron-store");
 const fs = require("fs").promises;
-const bcrypt = require("bcryptjs");
+const security = require("./security");
 
 const store = new Store();
 let mainWindow;
 let pool = null;
+
+const serializeData = (data) => {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+    ),
+  );
+};
+
+const getBasePath = () => {
+  return app.isPackaged ? app.getPath("userData") : path.join(__dirname, "..");
+};
 
 const configPath = path.join(app.getPath("userData"), "app_config.json");
 
@@ -39,7 +51,32 @@ async function ensureConfig() {
     console.log("Yeni config dosyası oluşturuldu:", configPath);
   }
 }
-ensureConfig();
+
+async function ensureFileSystem() {
+  const basePath = getBasePath();
+  const dirsToCreate = [
+    path.join(basePath, "configs"),
+    path.join(basePath, "configs/tenants"),
+    path.join(basePath, "queries")
+  ];
+
+  for (const dir of dirsToCreate) {
+    try {
+      await fs.access(dir);
+    } catch {
+      await fs.mkdir(dir, { recursive: true });
+      console.log("Yeni klasör oluşturuldu:", dir);
+    }
+  }
+
+  const presetsFile = path.join(basePath, "configs/presets.json");
+  try {
+    await fs.access(presetsFile);
+  } catch {
+    await fs.writeFile(presetsFile, JSON.stringify([], null, 2));
+    console.log("Yeni presets dosyası oluşturuldu:", presetsFile);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -67,7 +104,7 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    mainWindow.loadFile(path.join(__dirname, "../dist/react/index.html"));
   }
 
   mainWindow.on("closed", () => {
@@ -75,7 +112,11 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  await ensureConfig();
+  await ensureFileSystem();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -147,7 +188,7 @@ ipcMain.handle("db:connect", async (event, config) => {
       server: config.server,
       database: config.database,
       user: config.user,
-      password: config.password,
+      password: security.decrypt(config.password),
       options: {
         encrypt: config.encrypt || false,
         trustServerCertificate: config.trustServerCertificate || true,
@@ -159,12 +200,12 @@ ipcMain.handle("db:connect", async (event, config) => {
     pool = await sql.connect(dbConfig);
 
     if (config.saveConnection) {
-      const hashedPassword = await bcrypt.hash(config.password, 10);
+      const encryptedPassword = security.encrypt(security.decrypt(config.password));
       store.set("lastConnection", {
         server: config.server,
         database: config.database,
         user: config.user,
-        password: hashedPassword,
+        password: encryptedPassword,
         encrypt: config.encrypt,
         trustServerCertificate: config.trustServerCertificate,
       });
@@ -204,9 +245,11 @@ ipcMain.handle("db:getTables", async () => {
     const result = await pool.request().query(`
       SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
       FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME
+      WHERE TABLE_TYPE = 'BASE TABLE' 
+      ORDER BY TABLE_SCHEMA, TABLE_NAME
     `);
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -214,7 +257,7 @@ ipcMain.handle("db:getTables", async () => {
 
 ipcMain.handle(
   "db:getTableData",
-  async (event, { tableName, top, whereClause, orderBy }) => {
+  async (event, { tableName, top, whereClause, orderBy, joins = [] }) => {
     try {
       if (!pool) throw new Error("Veritabanı bağlantısı yok");
 
@@ -238,9 +281,9 @@ ipcMain.handle(
             return `CAST('<Binary/Spatial Data>' AS VARCHAR(50)) AS [${col.COLUMN_NAME}]`;
           }
           if (type === "xml" || type === "text" || type === "ntext") {
-            return `CAST(LEFT([${col.COLUMN_NAME}], 500) + '...' AS VARCHAR(503)) AS [${col.COLUMN_NAME}]`;
+            return `CAST(LEFT([${tableName}].[${col.COLUMN_NAME}], 500) + '...' AS VARCHAR(503)) AS [${col.COLUMN_NAME}]`;
           }
-          return `[${col.COLUMN_NAME}]`;
+          return `[${tableName}].[${col.COLUMN_NAME}]`;
         })
         .join(", ");
 
@@ -249,10 +292,21 @@ ipcMain.handle(
       const where = whereClause ? `WHERE ${whereClause}` : "";
       const order = orderBy ? `ORDER BY ${orderBy}` : "";
 
-      const query = `SELECT ${topClause} ${finalSelect} FROM [${tableName}] ${where} ${order}`;
+      let joinSql = "";
+      if (joins && joins.length > 0) {
+        joinSql = joins
+          .map((j) => {
+            const type = j.type || "INNER JOIN";
+            return `${type} [${j.targetTable}] ON [${tableName}].[${j.localColumn}] = [${j.targetTable}].[${j.targetColumn}]`;
+          })
+          .join(" ");
+      }
+
+      const query = `SELECT ${topClause} ${finalSelect} FROM [${tableName}] ${joinSql} ${where} ${order}`;
       const result = await pool.request().query(query);
 
-      return { success: true, data: result.recordset };
+      const serialized = serializeData(result.recordset);
+      return { success: true, data: serialized };
     } catch (error) {
       console.error("Tablo veri çekme hatası:", error);
       return { success: false, message: error.message };
@@ -269,7 +323,8 @@ ipcMain.handle("db:getTableColumns", async (event, tableName) => {
       FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_NAME = '${tableName}' ORDER BY ORDINAL_POSITION
     `);
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -348,7 +403,8 @@ ipcMain.handle("db:getViews", async () => {
     const result = await pool.request().query(`
       SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS ORDER BY TABLE_NAME
     `);
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -374,7 +430,8 @@ ipcMain.handle("db:getStoredProcedures", async () => {
       FROM INFORMATION_SCHEMA.ROUTINES
       WHERE ROUTINE_TYPE = 'PROCEDURE' ORDER BY ROUTINE_NAME
     `);
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -402,9 +459,10 @@ ipcMain.handle("db:executeSP", async (event, { spName, parameters }) => {
       request.input(param.name.replace("@", ""), sql[param.type], param.value);
     }
     const result = await request.execute(spName);
+    const serialized = serializeData(result.recordset);
     return {
       success: true,
-      data: result.recordset,
+      data: serialized,
       rowsAffected: result.rowsAffected,
     };
   } catch (error) {
@@ -416,9 +474,10 @@ ipcMain.handle("db:executeQuery", async (event, query) => {
   try {
     if (!pool) throw new Error("Veritabanı bağlantısı yok");
     const result = await pool.request().query(query);
+    const serialized = serializeData(result.recordset);
     return {
       success: true,
-      data: result.recordset,
+      data: serialized,
       rowsAffected: result.rowsAffected,
     };
   } catch (error) {
@@ -428,7 +487,7 @@ ipcMain.handle("db:executeQuery", async (event, query) => {
 
 ipcMain.handle("fs:readQueries", async () => {
   try {
-    const queriesPath = path.join(__dirname, "../queries");
+    const queriesPath = path.join(getBasePath(), "queries");
     const files = await fs.readdir(queriesPath);
     const sqlFiles = files.filter((file) => file.endsWith(".sql"));
     const queries = await Promise.all(
@@ -449,7 +508,7 @@ ipcMain.handle("fs:readQueries", async () => {
 ipcMain.handle("fs:saveQuery", async (event, { filename, content }) => {
   try {
     const safeName = filename.endsWith(".sql") ? filename : `${filename}.sql`;
-    const filePath = path.join(__dirname, "../queries", safeName);
+    const filePath = path.join(getBasePath(), "queries", safeName);
     await fs.writeFile(filePath, content, "utf-8");
     return { success: true, message: "Sorgu başarıyla kaydedildi." };
   } catch (error) {
@@ -459,7 +518,7 @@ ipcMain.handle("fs:saveQuery", async (event, { filename, content }) => {
 
 ipcMain.handle("fs:deleteQuery", async (event, filename) => {
   try {
-    const filePath = path.join(__dirname, "../queries", filename);
+    const filePath = path.join(getBasePath(), "queries", filename);
     await fs.unlink(filePath);
     return { success: true, message: "Sorgu silindi." };
   } catch (error) {
@@ -469,7 +528,7 @@ ipcMain.handle("fs:deleteQuery", async (event, filename) => {
 
 ipcMain.handle("fs:readPresets", async () => {
   try {
-    const presetsPath = path.join(__dirname, "../configs/presets.json");
+    const presetsPath = path.join(getBasePath(), "configs/presets.json");
     const content = await fs.readFile(presetsPath, "utf-8");
     return { success: true, data: JSON.parse(content) };
   } catch (error) {
@@ -479,7 +538,7 @@ ipcMain.handle("fs:readPresets", async () => {
 
 ipcMain.handle("fs:savePresets", async (event, presets) => {
   try {
-    const presetsPath = path.join(__dirname, "../configs/presets.json");
+    const presetsPath = path.join(getBasePath(), "configs/presets.json");
     await fs.writeFile(presetsPath, JSON.stringify(presets, null, 2));
     return { success: true };
   } catch (error) {
@@ -487,9 +546,10 @@ ipcMain.handle("fs:savePresets", async (event, presets) => {
   }
 });
 
-const tenantsDirPath = path.join(__dirname, "../configs/tenants");
+const getTenantsDirPath = () => path.join(getBasePath(), "configs/tenants");
 
 async function ensureTenantsDir() {
+  const tenantsDirPath = getTenantsDirPath();
   try {
     await fs.access(tenantsDirPath);
   } catch {
@@ -500,6 +560,7 @@ async function ensureTenantsDir() {
 ipcMain.handle("fs:readTenants", async () => {
   try {
     await ensureTenantsDir();
+    const tenantsDirPath = getTenantsDirPath();
     const files = await fs.readdir(tenantsDirPath);
     const jsonFiles = files.filter((file) => file.endsWith(".json"));
 
@@ -509,7 +570,14 @@ ipcMain.handle("fs:readTenants", async () => {
           path.join(tenantsDirPath, file),
           "utf-8",
         );
-        return JSON.parse(content);
+        const tenant = JSON.parse(content);
+        if (tenant.databases) {
+          tenant.databases = tenant.databases.map(db => ({
+            ...db,
+            password: security.decrypt(db.password)
+          }));
+        }
+        return tenant;
       }),
     );
 
@@ -523,8 +591,18 @@ ipcMain.handle("fs:readTenants", async () => {
 ipcMain.handle("fs:saveTenant", async (event, tenantData) => {
   try {
     await ensureTenantsDir();
+    const tenantsDirPath = getTenantsDirPath();
     const filePath = path.join(tenantsDirPath, `${tenantData.id}.json`);
-    await fs.writeFile(filePath, JSON.stringify(tenantData, null, 2));
+
+    const dataToSave = { ...tenantData };
+    if (dataToSave.databases) {
+      dataToSave.databases = dataToSave.databases.map(db => ({
+        ...db,
+        password: security.encrypt(db.password)
+      }));
+    }
+
+    await fs.writeFile(filePath, JSON.stringify(dataToSave, null, 2));
     return { success: true };
   } catch (error) {
     console.error("Ortam kaydedilirken hata:", error);
@@ -534,6 +612,7 @@ ipcMain.handle("fs:saveTenant", async (event, tenantData) => {
 
 ipcMain.handle("fs:deleteTenant", async (event, tenantId) => {
   try {
+    const tenantsDirPath = getTenantsDirPath();
     const filePath = path.join(tenantsDirPath, `${tenantId}.json`);
     await fs.unlink(filePath);
     return { success: true };
@@ -571,7 +650,8 @@ ipcMain.handle("db:getActivity", async () => {
       ORDER BY r.cpu_time DESC, r.total_elapsed_time DESC
     `);
 
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -605,7 +685,7 @@ ipcMain.handle("db:getServerHealth", async () => {
     return {
       success: true,
       cpu: cpuResult.recordset[0]?.SQLCPU || 0,
-      disks: diskResult.recordset,
+      disks: serializeData(diskResult.recordset),
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -634,7 +714,8 @@ ipcMain.handle("db:getTableRelations", async (event, tableName) => {
       WHERE parentTable.name = '${tableName}' OR referencedTable.name = '${tableName}'
     `);
 
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -666,12 +747,14 @@ ipcMain.handle("db:getFragmentedIndexes", async () => {
 
     const healthScore = healthResult.recordset[0]?.HealthScore || 100;
 
+    const serialized = serializeData({
+      indexes: indexesResult.recordset,
+      healthScore: healthScore,
+    });
+
     return {
       success: true,
-      data: {
-        indexes: indexesResult.recordset,
-        healthScore: healthScore,
-      },
+      data: serialized,
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -746,12 +829,14 @@ ipcMain.handle("db:getDbSpaceInfo", async () => {
       ORDER BY [TotalSpaceMB] DESC
     `);
 
+    const serialized = serializeData({
+      files: filesResult.recordset,
+      topTables: topTablesResult.recordset,
+    });
+
     return {
       success: true,
-      data: {
-        files: filesResult.recordset,
-        topTables: topTablesResult.recordset,
-      },
+      data: serialized,
     };
   } catch (error) {
     console.error("Disk bilgisi çekilirken SQL Hatası:", error.message);
@@ -883,7 +968,8 @@ ipcMain.handle("db:getSqlJobs", async () => {
       FROM msdb.dbo.sysjobs j ORDER BY j.name ASC;
     `;
     const result = await pool.request().query(query);
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -930,7 +1016,8 @@ ipcMain.handle("db:getSqlJobHistory", async (event, jobName) => {
       .request()
       .input("jobName", sql.NVarChar, jobName)
       .query(query);
-    return { success: true, data: result.recordset };
+    const serialized = serializeData(result.recordset);
+    return { success: true, data: serialized };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -949,9 +1036,13 @@ ipcMain.handle("db:getSqlJobDetails", async (event, jobName) => {
       .request()
       .input("jobName", sql.NVarChar, jobName)
       .query(schedQuery);
+    const serialized = serializeData({
+      steps: stepsResult.recordset,
+      schedules: schedResult.recordset,
+    });
     return {
       success: true,
-      data: { steps: stepsResult.recordset, schedules: schedResult.recordset },
+      data: serialized,
     };
   } catch (error) {
     return { success: false, message: error.message };

@@ -42,6 +42,7 @@ import {
   HeartPulse,
   Trash2,
   ServerCog,
+  MoreVertical,
 } from "lucide-react";
 
 import TablesPage from "./pages/TablesPage";
@@ -172,7 +173,7 @@ export default function Dashboard({
     try {
       if ((window as any).electronAPI)
         await (window as any).electronAPI.dbDisconnect();
-    } catch (error) {}
+    } catch (error) { }
     onDisconnect();
     navigate("/");
   };
@@ -388,14 +389,17 @@ export default function Dashboard({
         <Button
           variant="ghost"
           className={cn(
-            "w-full flex items-center justify-start p-0 h-9 font-normal transition-colors rounded-lg group overflow-hidden",
+            "w-full flex items-center justify-start p-0 h-10 font-normal transition-colors rounded-lg group overflow-hidden",
             isActive
               ? "bg-primary/10 text-primary font-medium"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
           )}
           onClick={() => navigate(path)}
         >
-          <div className="w-[56px] h-full shrink-0 flex items-center justify-center transition-colors">
+          <div className={cn(
+            "h-full shrink-0 flex items-center justify-center transition-colors",
+            sidebarOpen ? "w-[56px]" : "w-[72px]"
+          )}>
             <Icon
               className={cn(
                 "transition-colors duration-300",
@@ -459,11 +463,11 @@ export default function Dashboard({
                 size="icon"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className={cn(
-                  "absolute transition-all duration-300 shrink-0 h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary",
+                  "absolute transition-all duration-300 shrink-0 h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary",
                   sidebarOpen ? "right-0" : "left-1/2 -translate-x-1/2",
                 )}
               >
-                <Menu className="h-4 w-4" />
+                <Menu className="h-5 w-5" />
               </Button>
             </ActionTooltip>
           </div>
@@ -492,7 +496,11 @@ export default function Dashboard({
                   )}
                 >
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm ${tenant.color}`}
+                    className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm transition-all duration-300",
+                      tenant.color,
+                      !sidebarOpen && "ring-2 ring-background ring-offset-2 ring-offset-muted/20"
+                    )}
                   >
                     {tenant.shortName}
                   </div>
@@ -515,7 +523,10 @@ export default function Dashboard({
           )}
         </div>
 
-        <nav className="flex-1 py-4 px-2 space-y-4 overflow-y-auto overflow-x-hidden scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav className={cn(
+          "flex-1 py-4 space-y-4 overflow-y-auto overflow-x-hidden scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden transition-all duration-300",
+          sidebarOpen ? "px-2" : "px-0"
+        )}>
           <div className="flex flex-col">
             <MenuItem
               path="/dashboard"
@@ -581,7 +592,7 @@ export default function Dashboard({
                     "flex flex-col gap-0.5 transition-all duration-300 overflow-hidden",
                     !sidebarOpen
                       ? "bg-muted/30 border border-border/40 rounded-xl py-1 shadow-inner"
-                      : "bg-transparent border-transparent py-0",
+                      : "bg-muted/10 border border-border/30 rounded-xl py-1 px-1 mt-1 mb-2 mx-2",
                   )}
                 >
                   <div className="relative w-full h-9 mb-1 shrink-0 overflow-hidden">
@@ -626,14 +637,14 @@ export default function Dashboard({
                               label={t("dashboard.dbSettings")}
                               side="top"
                             >
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground shadow-sm bg-background"
-                                onClick={openDbSettingsModal}
-                              >
-                                <Settings className="h-4 w-4" />
-                              </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground shadow-sm bg-background transition-all active:scale-90"
+                                  onClick={openDbSettingsModal}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
                             </ActionTooltip>
                           )}
                         </div>
@@ -721,9 +732,12 @@ export default function Dashboard({
                     <Button
                       onClick={openAddDbModal}
                       variant="ghost"
-                      className="w-full flex items-center justify-start p-0 h-9 font-normal transition-colors duration-300 rounded-lg group text-primary hover:bg-primary/10 mt-1"
+                      className="w-full flex items-center justify-start p-0 h-10 font-normal transition-colors duration-300 rounded-lg group text-primary hover:bg-primary/10 mt-1"
                     >
-                      <div className="w-[56px] h-full shrink-0 flex items-center justify-center">
+                      <div className={cn(
+                        "h-full shrink-0 flex items-center justify-center transition-all duration-300",
+                        sidebarOpen ? "w-[56px]" : "w-[72px]"
+                      )}>
                         <PlusCircle
                           className={cn(
                             "transition-colors duration-300",
@@ -807,7 +821,7 @@ export default function Dashboard({
                     "flex flex-col gap-0.5 transition-all duration-300 overflow-hidden",
                     !sidebarOpen
                       ? "bg-muted/30 border border-border/40 rounded-xl py-1 shadow-inner"
-                      : "bg-transparent border-transparent py-0",
+                      : "bg-muted/10 border border-border/30 rounded-xl py-1 px-1 mt-1 mb-2 mx-2",
                   )}
                 >
                   <div className="relative w-full h-9 mb-1 shrink-0 overflow-hidden">
@@ -820,7 +834,7 @@ export default function Dashboard({
                       )}
                     >
                       {!tenant?.windowsServers ||
-                      tenant.windowsServers.length === 0 ? (
+                        tenant.windowsServers.length === 0 ? (
                         <div className="w-full h-8 px-2 flex items-center justify-center text-[11px] text-muted-foreground/60 italic border border-dashed rounded-md bg-transparent whitespace-nowrap">
                           {t("dashboard.noServer")}
                         </div>
@@ -843,7 +857,7 @@ export default function Dashboard({
                       )}
                     >
                       {!tenant?.windowsServers ||
-                      tenant.windowsServers.length === 0 ? (
+                        tenant.windowsServers.length === 0 ? (
                         <ActionTooltip
                           label={t("dashboard.noServer")}
                           side="right"
@@ -868,7 +882,7 @@ export default function Dashboard({
                   <SidebarTooltip label={t("dashboard.addWinServer")}>
                     <Button
                       variant="ghost"
-                      className="w-full flex items-center justify-start p-0 h-9 font-normal transition-colors duration-300 rounded-lg group text-info hover:bg-info/10 mt-1"
+                      className="w-full flex items-center justify-start p-0 h-10 font-normal transition-colors duration-300 rounded-lg group text-info hover:bg-info/10 mt-1"
                     >
                       <div
                         className={cn(
@@ -958,7 +972,7 @@ export default function Dashboard({
                     "flex flex-col gap-0.5 transition-all duration-300 overflow-hidden",
                     !sidebarOpen
                       ? "bg-muted/30 border border-border/40 rounded-xl py-1 shadow-inner"
-                      : "bg-transparent border-transparent py-0",
+                      : "bg-muted/10 border border-border/30 rounded-xl py-1 px-1 mt-1 mb-2 mx-2",
                   )}
                 >
                   <div className="relative w-full h-9 mb-1 shrink-0 overflow-hidden">
@@ -971,7 +985,7 @@ export default function Dashboard({
                       )}
                     >
                       {!tenant?.linuxServers ||
-                      tenant.linuxServers.length === 0 ? (
+                        tenant.linuxServers.length === 0 ? (
                         <div className="w-full h-8 px-2 flex items-center justify-center text-[11px] text-muted-foreground/60 italic border border-dashed rounded-md bg-transparent whitespace-nowrap">
                           {t("dashboard.noServer")}
                         </div>
@@ -994,7 +1008,7 @@ export default function Dashboard({
                       )}
                     >
                       {!tenant?.linuxServers ||
-                      tenant.linuxServers.length === 0 ? (
+                        tenant.linuxServers.length === 0 ? (
                         <ActionTooltip
                           label={t("dashboard.noServer")}
                           side="right"
@@ -1019,7 +1033,7 @@ export default function Dashboard({
                   <SidebarTooltip label={t("dashboard.addLinServer")}>
                     <Button
                       variant="ghost"
-                      className="w-full flex items-center justify-start p-0 h-9 font-normal transition-colors duration-300 rounded-lg group text-warning hover:bg-warning/10 mt-1"
+                      className="w-full flex items-center justify-start p-0 h-10 font-normal transition-colors duration-300 rounded-lg group text-warning hover:bg-warning/10 mt-1"
                     >
                       <div
                         className={cn(
@@ -1053,40 +1067,60 @@ export default function Dashboard({
           </div>
         </nav>
 
-        <div className="p-2 border-t bg-muted/10 shrink-0 flex flex-col gap-1 overflow-hidden">
-          <MenuItem
-            path="/dashboard/settings"
-            icon={Settings}
-            label={t("dashboard.settings")}
-          />
-          <SidebarTooltip label={t("dashboard.backToEnvs")}>
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full flex items-center justify-start p-0 h-9 font-normal transition-colors duration-300 rounded-lg group text-destructive hover:text-destructive hover:bg-destructive/10",
-              )}
-              onClick={handleDisconnect}
-            >
-              <div className="w-[56px] h-full shrink-0 flex items-center justify-center">
-                <LogOut
-                  className={cn(
-                    "transition-colors duration-300",
-                    sidebarOpen ? "h-4 w-4" : "h-5 w-5",
-                  )}
-                />
-              </div>
-              <div
+        <div className={cn(
+          "p-3 border-t bg-muted/20 shrink-0 flex flex-col gap-2 transition-all duration-300",
+          !sidebarOpen && "items-center"
+        )}>
+          <div className={cn(
+            "flex gap-2 w-full transition-all duration-300",
+            sidebarOpen ? "flex-col" : "flex-col items-center"
+          )}>
+            <SidebarTooltip label={t("dashboard.settings")}>
+              <Button
+                variant="ghost"
                 className={cn(
-                  "flex-1 flex items-center overflow-hidden transition-all duration-300 whitespace-nowrap",
-                  sidebarOpen ? "opacity-100 pr-3" : "opacity-0 w-0 hidden",
+                  "flex items-center justify-start p-0 h-10 font-bold transition-all duration-300 rounded-xl group overflow-hidden bg-primary/10 text-primary hover:bg-primary/20",
+                  sidebarOpen ? "w-full" : "w-10"
                 )}
+                onClick={() => navigate("/dashboard/settings")}
               >
-                <span className="truncate text-sm">
-                  {t("dashboard.backToEnvs")}
-                </span>
-              </div>
-            </Button>
-          </SidebarTooltip>
+                <div className={cn(
+                  "h-full shrink-0 flex items-center justify-center transition-all duration-300",
+                  sidebarOpen ? "w-[48px]" : "w-full"
+                )}>
+                  <Settings className="h-5 w-5" />
+                </div>
+                {sidebarOpen && (
+                  <span className="truncate text-sm pr-3">
+                    {t("dashboard.settings")}
+                  </span>
+                )}
+              </Button>
+            </SidebarTooltip>
+
+            <SidebarTooltip label={t("dashboard.backToEnvs")}>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "flex items-center justify-start p-0 h-10 font-bold transition-all duration-300 rounded-xl group overflow-hidden bg-destructive/10 text-destructive hover:bg-destructive hover:text-white",
+                  sidebarOpen ? "w-full" : "w-10"
+                )}
+                onClick={handleDisconnect}
+              >
+                <div className={cn(
+                  "h-full shrink-0 flex items-center justify-center transition-all duration-300",
+                  sidebarOpen ? "w-[48px]" : "w-full"
+                )}>
+                  <LogOut className="h-5 w-5" />
+                </div>
+                {sidebarOpen && (
+                  <span className="truncate text-sm pr-3">
+                    {t("dashboard.backToEnvs")}
+                  </span>
+                )}
+              </Button>
+            </SidebarTooltip>
+          </div>
         </div>
       </aside>
 

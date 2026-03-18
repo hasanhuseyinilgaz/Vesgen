@@ -1,6 +1,7 @@
 export const APP_INFO = {
-  NAME: "Vesgen",
-  VERSION: "1.0.0-dev",
-  COMPANY: "Lizoco",
-  DESCRIPTION: "Infrastructure & Database Command Center",
+  NAME: __APP_NAME__,
+  VERSION: __APP_VERSION__,
+  COMPANY: __APP_AUTHOR__,
+  AUTHOR: __APP_AUTHOR__,
+  DESCRIPTION: __APP_DESCRIPTION__,
 };

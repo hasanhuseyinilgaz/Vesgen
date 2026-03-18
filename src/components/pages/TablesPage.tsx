@@ -22,7 +22,7 @@ import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
 import DataTable from "@/components/DataTable";
 import EmptyState from "@/components/EmptyState";
 import SearchableSidebar from "@/components/SearchableSidebar";
-import DataToolbar from "@/components/DataToolbar";
+import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import CustomTabs from "@/components/CustomTabs";
 import SchemaDiagram from "@/components/SchemaDiagram";
@@ -61,6 +61,7 @@ export default function TablesPage() {
     topRows,
     setTopRows,
     activeWhereClause,
+    activeJoins,
     sortConfig,
     showFilter,
     setShowFilter,
@@ -83,6 +84,13 @@ export default function TablesPage() {
   useEffect(() => {
     if (selectedTable && activeTab === "schema")
       loadSchemaDiagram(selectedTable);
+
+    // Tablo görünümünden çıkıldığında panelleri kapat ve canlı izlemeyi durdur
+    if (activeTab !== "data") {
+      setShowFilter(false);
+      setShowLivePanel(false);
+      setIsLiveActive(false);
+    }
   }, [selectedTable, activeTab]);
 
   const loadTables = async () => {
@@ -205,61 +213,76 @@ export default function TablesPage() {
         />
       }
     >
-      <div
-        className={cn(
-          "h-full bg-background custom-scrollbar",
-          activeTab === "data"
-            ? "overflow-y-auto"
-            : "overflow-hidden flex flex-col",
-        )}
-      >
-        {selectedTable ? (
-          <div
-            className={cn(
-              "p-6 flex flex-col gap-6",
-              activeTab === "schema" && "flex-1 overflow-hidden",
-            )}
-          >
-            <div className="flex flex-col gap-0 shrink-0">
-              <DataToolbar
-                title={selectedTable}
-                recordCount={tableData.length}
-                onRefresh={() =>
-                  loadTableData(selectedTable, activeWhereClause, sortConfig)
-                }
-                showFilter={showFilter}
-                onToggleFilter={() => {
-                  setShowLivePanel(false);
-                  setShowFilter(!showFilter);
-                }}
-                isFilterActive={activeWhereClause.trim().length > 0}
-                showLiveButton={activeTab === "data"}
-                showLivePanel={showLivePanel}
-                onToggleLivePanel={() => {
-                  setShowFilter(false);
-                  setShowLivePanel(!showLivePanel);
-                }}
-                isLiveActive={isLiveActive}
-                loading={loading}
-                onExport={() => exportToExcel(tableData, selectedTable)}
-                topRows={topRows}
-                onTopRowsChange={(val) => {
-                  setTopRows(val);
-                  loadTableData(selectedTable, activeWhereClause, sortConfig);
-                }}
-              />
-              <div className={cn("mt-4", !showFilter && "hidden")}>
+      <div className="flex flex-col h-full bg-background overflow-hidden">
+        <div
+          className={cn(
+            "flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full",
+            activeTab === "schema" ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden custom-scrollbar",
+          )}
+        >
+          <PageHeader
+            title={t("tables.pageTitle")}
+            icon={TableIcon}
+            description={t("tables.pageDescription")}
+            badges={selectedTable ? [
+              {
+                label: t("tables.activeTable"),
+                value: selectedTable,
+              },
+              {
+                label: "MODE",
+                value: activeTab === "data"
+                  ? `${tableData.length} ${t("components.dataToolbar.records").toUpperCase()}`
+                  : t("tables.tabSchema").toUpperCase(),
+              },
+            ] : undefined}
+            recordCount={selectedTable ? tableData.length : undefined}
+            onRefresh={selectedTable ? () =>
+              loadTableData(selectedTable, activeWhereClause, sortConfig) : undefined
+            }
+            showFilter={showFilter}
+            onToggleFilter={() => {
+              setShowLivePanel(false);
+              setShowFilter(!showFilter);
+            }}
+            isFilterActive={activeWhereClause.trim().length > 0}
+            showFilterButton={!!selectedTable && activeTab === "data"}
+            showLiveButton={!!selectedTable && activeTab === "data"}
+            showRefreshButton={!!selectedTable}
+            showLimitSelector={!!selectedTable}
+            showRecordCount={!!selectedTable}
+            showLivePanel={showLivePanel}
+            onToggleLivePanel={() => {
+              setShowFilter(false);
+              setShowLivePanel(!showLivePanel);
+            }}
+            isLiveActive={isLiveActive}
+            loading={loading}
+            onExport={selectedTable ? () => exportToExcel(tableData, selectedTable) : undefined}
+            topRows={topRows}
+            onTopRowsChange={selectedTable ? (val) => {
+              setTopRows(val);
+              loadTableData(selectedTable, activeWhereClause, sortConfig);
+            } : undefined}
+          />
+
+          {selectedTable ? (
+            <>
+              <div className={cn("mt-0", !showFilter && "hidden")}>
                 <FilterPanel
+                  tableName={selectedTable}
                   columns={columns}
-                  onApplyFilter={(wc) =>
-                    loadTableData(selectedTable, wc, sortConfig)
+                  allTables={tables}
+                  isApplied={activeWhereClause.trim().length > 0 || activeJoins.length > 0}
+                  onApplyFilter={(wc, joins) =>
+                    loadTableData(selectedTable, wc, sortConfig, false, joins)
                   }
                   onClearFilter={() =>
-                    loadTableData(selectedTable, "", sortConfig)
+                    loadTableData(selectedTable, "", sortConfig, false, [])
                   }
                 />
               </div>
-              <div className={cn("mt-4", !showLivePanel && "hidden")}>
+              <div className={cn("mt-0", !showLivePanel && "hidden")}>
                 <LiveMonitoringPanel
                   isVisible={showLivePanel}
                   onRefresh={() =>
@@ -271,67 +294,80 @@ export default function TablesPage() {
                     )
                   }
                   onStatusChange={setIsLiveActive}
+                  onAutoSort={() => {
+                    const primaryKeyCol = columns.find(
+                      (c: any) => c.IS_PRIMARY_KEY === true || c.IS_PRIMARY_KEY === 1
+                    );
+
+                    const sortColumn = primaryKeyCol
+                      ? primaryKeyCol.COLUMN_NAME
+                      : columns[0]?.COLUMN_NAME;
+
+                    if (sortColumn) {
+                      handleSort(sortColumn, "DESC");
+                    }
+                  }}
                 />
               </div>
-            </div>
 
-            <CustomTabs
-              activeTab={activeTab}
-              onTabChange={setActiveTab as any}
-              tabs={[
-                { value: "data", label: t("tables.tabData"), icon: TableIcon },
-                {
-                  value: "schema",
-                  label: t("tables.tabSchema"),
-                  icon: Network,
-                },
-              ]}
-            />
+              <CustomTabs
+                activeTab={activeTab}
+                onTabChange={setActiveTab as any}
+                tabs={[
+                  { value: "data", label: t("tables.tabData"), icon: TableIcon },
+                  {
+                    value: "schema",
+                    label: t("tables.tabSchema"),
+                    icon: Network,
+                  },
+                ]}
+              />
 
-            <div
-              className={cn(
-                "w-full",
-                activeTab === "schema" ? "flex-1 min-h-0" : "shrink-0",
-              )}
-            >
-              {activeTab === "data" ? (
-                <DataTable
-                  data={tableData}
-                  columns={columns.map((c: any) => ({
-                    name: c.COLUMN_NAME,
-                    type: c.DATA_TYPE,
-                    isIdentity: c.IS_IDENTITY === 1,
-                  }))}
-                  title={selectedTable}
-                  sortConfig={sortConfig}
-                  enableUpdate={true}
-                  onSort={handleSort}
-                  onUpdateRecord={handleUpdateRecord}
-                />
-              ) : (
-                <div className="h-full flex flex-col">
-                  <div className="flex-1 relative border rounded-xl overflow-hidden shadow-inner bg-muted/5">
-                    <SchemaDiagram
-                      nodes={nodes}
-                      edges={edges}
-                      onNodesChange={onNodesChange}
-                      onEdgesChange={onEdgesChange}
-                      onFullScreen={() => setIsDiagramModalOpen(true)}
-                    />
+              <div
+                className={cn(
+                  "w-full",
+                  activeTab === "schema" ? "flex-1 min-h-0" : "shrink-0",
+                )}
+              >
+                {activeTab === "data" ? (
+                  <DataTable
+                    data={tableData}
+                    columns={columns.map((c: any) => ({
+                      name: c.COLUMN_NAME,
+                      type: c.DATA_TYPE,
+                      isIdentity: c.IS_IDENTITY === 1,
+                    }))}
+                    title={selectedTable}
+                    sortConfig={sortConfig}
+                    enableUpdate={activeJoins.length === 0}
+                    onSort={handleSort}
+                    onUpdateRecord={handleUpdateRecord}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col">
+                    <div className="flex-1 relative border rounded-xl overflow-hidden shadow-inner bg-muted/5">
+                      <SchemaDiagram
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onFullScreen={() => setIsDiagramModalOpen(true)}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center -mt-20 w-full">
+              <EmptyState
+                icon={TableIcon}
+                title={t("tables.readyToTable")}
+                description={t("tables.selectToStart")}
+              />
             </div>
-          </div>
-        ) : (
-          <div className="h-full w-full flex items-center justify-center">
-            <EmptyState
-              icon={Database}
-              title={t("tables.readyToView")}
-              description={t("tables.selectToStart")}
-            />
-          </div>
-        )}
+          )}
+        </div>
 
         <Dialog
           open={updateResultModal.isOpen}

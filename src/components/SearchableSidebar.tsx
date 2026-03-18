@@ -80,14 +80,17 @@ export default function SearchableSidebar({
             key={item.id}
             variant="ghost"
             className={cn(
-              "w-full justify-start text-sm font-medium truncate transition-colors",
+              "w-full justify-start text-sm font-medium truncate transition-colors group",
               selectedItemId === item.id
                 ? "bg-primary/10 text-primary hover:bg-primary/15"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
             onClick={() => onSelect(item.id)}
           >
-            <Icon className="h-4 w-4 mr-2 opacity-70 shrink-0" />
+            <Icon className={cn(
+              "h-4 w-4 mr-2 shrink-0",
+              selectedItemId === item.id ? "opacity-100" : "opacity-70 group-hover:opacity-100"
+            )} />
             <span className="truncate">{item.label}</span>
           </Button>
         ))}

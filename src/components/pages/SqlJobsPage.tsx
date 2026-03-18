@@ -14,7 +14,6 @@ import {
   PlusCircle,
   CalendarClock,
   Code,
-  Save,
   Trash2,
   Edit,
 } from "lucide-react";
@@ -34,6 +33,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import CustomTabs from "@/components/CustomTabs";
+import PageHeader from "@/components/PageHeader";
 import {
   Select,
   SelectContent,
@@ -297,31 +297,6 @@ export default function SqlJobsPage() {
     } else alert(`${t("common.error")}: ` + res?.message);
   };
 
-  const addStep = async () => {
-    const db = await getCurrentDbName();
-    setEditorModal((p) => ({
-      ...p,
-      data: {
-        ...p.data,
-        steps: [
-          ...p.data.steps,
-          { id: Date.now(), name: t("jobs.newStep"), db, cmd: "" },
-        ],
-      },
-    }));
-  };
-
-  const updateStep = (id: number, field: string, value: string) => {
-    setEditorModal((p) => ({
-      ...p,
-      data: {
-        ...p.data,
-        steps: p.data.steps.map((s: any) =>
-          s.id === id ? { ...s, [field]: value } : s,
-        ),
-      },
-    }));
-  };
 
   const updateSchedule = (field: string, value: any) => {
     setEditorModal((p) => ({
@@ -339,52 +314,50 @@ export default function SqlJobsPage() {
 
   return (
     <PageLayout>
-      <div className="flex h-screen bg-background flex-col w-full relative z-0">
-        <div className="p-6 pb-4 border-b bg-muted/10 shrink-0 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 text-primary rounded-xl">
-              <ServerCog className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                {t("jobs.title")}
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                {t("jobs.description")}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Input
-              placeholder={t("jobs.searchPlaceholder")}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-64 bg-card border-border/50"
-            />
-            <ActionTooltip label={t("common.refresh")} side="bottom">
-              <Button
-                onClick={() => fetchJobs(false)}
-                disabled={loading || actionLoading}
-                variant="outline"
-                size="icon"
-                className="shadow-sm border-border/50"
-              >
-                <RefreshCw
-                  className={cn("w-4 h-4", loading && "animate-spin")}
+      <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+        <div className="flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+          <PageHeader
+            title={t("jobs.title")}
+            icon={ServerCog}
+            description={t("jobs.description")}
+            showLimitSelector={false}
+            showFilterButton={false}
+            showLiveButton={false}
+            showRefreshButton={false}
+            recordCount={filteredJobs.length}
+            showRecordCount={searchTerm.length > 0}
+            customActions={
+              <div className="flex items-center gap-3">
+                <Input
+                  placeholder={t("jobs.searchPlaceholder")}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-48 sm:w-64 bg-card border-border/50 h-9"
                 />
-              </Button>
-            </ActionTooltip>
-            <div className="w-px h-8 bg-border/50 mx-1"></div>
-            <Button
-              onClick={openEditorForCreate}
-              className="bg-primary text-primary-foreground font-bold shadow-lg hover:shadow-primary/20"
-            >
-              <PlusCircle className="w-4 h-4 mr-2" /> {t("jobs.createJob")}
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 bg-muted/5 custom-scrollbar">
+                <ActionTooltip label={t("common.refresh")} side="bottom">
+                  <Button
+                    onClick={() => fetchJobs(false)}
+                    disabled={loading || actionLoading}
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shadow-sm border-border/50"
+                  >
+                    <RefreshCw
+                      className={cn("w-4 h-4", loading && "animate-spin")}
+                    />
+                  </Button>
+                </ActionTooltip>
+                <div className="w-px h-6 bg-border/50 mx-1 hidden sm:block"></div>
+                <Button
+                  onClick={openEditorForCreate}
+                  size="sm"
+                  className="bg-primary text-primary-foreground font-bold shadow-lg hover:shadow-primary/20 h-9"
+                >
+                  <PlusCircle className="w-4 h-4 mr-2" /> {t("jobs.createJob")}
+                </Button>
+              </div>
+            }
+          />
           <Card className="border-border/50 shadow-sm overflow-hidden bg-card">
             <CardContent className="p-0">
               <table className="w-full text-sm text-left border-collapse">

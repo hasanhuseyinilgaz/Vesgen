@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Settings,
-  Save,
   ShieldAlert,
   Wrench,
   LayoutTemplate,
@@ -68,9 +67,48 @@ export default function SettingsPage() {
     handlePermissionChange,
   } = useSettings();
 
+  const hasInitialized = useRef(false);
+
   useEffect(() => {
     loadConfig();
-  }, []);
+  }, [loadConfig]);
+
+  // Initial setup of live styles once config is loaded
+  useEffect(() => {
+    if (config && !hasInitialized.current) {
+      document.documentElement.style.setProperty(
+        "--vibrancy",
+        (config.visuals?.vibrancy ?? 1.0).toString(),
+      );
+      document.documentElement.style.setProperty(
+        "--glass-opacity",
+        (config.visuals?.glassOpacity ?? 0.05).toString(),
+      );
+      hasInitialized.current = true;
+    }
+  }, [config]);
+
+  // Handle Live Preview & Auto-Save
+  useEffect(() => {
+    if (!config || !hasInitialized.current) return;
+
+    // Direct CSS Variable Updates (Live Preview)
+    document.documentElement.style.setProperty(
+      "--vibrancy",
+      (config.visuals?.vibrancy ?? 1.0).toString(),
+    );
+    document.documentElement.style.setProperty(
+      "--glass-opacity",
+      (config.visuals?.glassOpacity ?? 0.05).toString(),
+    );
+
+    // Debounced Auto-Save
+    const timer = setTimeout(() => {
+      saveConfig();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [config]);
 
   const handleAuthentication = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,36 +204,38 @@ export default function SettingsPage() {
                 {t("settings.description")}
               </p>
             </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="flex items-center gap-3 w-full sm:w-auto min-h-[44px] justify-end">
               {saveMessage.show && (
-                <span
+                <div
                   className={cn(
-                    "text-sm font-bold flex items-center mr-2 animate-in fade-in slide-in-from-right-4",
+                    "flex items-center px-4 py-2 rounded-full border shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-right-2",
                     saveMessage.type === "success"
-                      ? "text-success"
+                      ? "bg-success/10 border-success/30 text-success"
                       : saveMessage.type === "info"
-                        ? "text-warning"
-                        : "text-destructive",
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-destructive/10 border-destructive/30 text-destructive",
                   )}
                 >
                   {saveMessage.type === "success" ? (
-                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
                   ) : saveMessage.type === "info" ? (
-                    <AlertCircle className="w-4 h-4 mr-1.5" />
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
-                    <RefreshCw className="w-4 h-4 mr-1.5" />
+                    <AlertCircle className="w-4 h-4 mr-2" />
                   )}
-                  {saveMessage.text}
-                </span>
+                  <span className="text-sm font-bold uppercase tracking-tight">
+                    {saveMessage.text}
+                  </span>
+                </div>
               )}
-              <Button
-                onClick={saveConfig}
-                disabled={saving}
-                className="shadow-md w-full sm:w-auto font-semibold px-6 h-11"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? t("settings.saving") : t("settings.saveSettings")}
-              </Button>
+              {saving && !saveMessage.show && (
+                <div className="flex items-center px-4 py-2 rounded-full bg-primary/10 border border-primary/30 text-primary animate-pulse">
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <span className="text-sm font-bold uppercase tracking-tight">
+                    {t("settings.saving")}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -268,6 +308,69 @@ export default function SettingsPage() {
                     }
                   />
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm border-border/60 rounded-2xl overflow-hidden mt-8 relative z-10">
+            <CardHeader className="bg-primary/5 border-b border-border/40 pb-5">
+              <CardTitle className="text-xl flex items-center gap-2 text-foreground">
+                <LayoutTemplate className="w-6 h-6 text-primary" />
+                {t("settings.visualsAndGlass")}
+              </CardTitle>
+              <CardDescription className="text-sm">
+                {t("settings.visualsDescription")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6 bg-card p-5 rounded-xl border shadow-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <Label className="font-bold text-foreground text-sm uppercase tracking-wider">
+                    {t("settings.vibrancyLevel")}
+                  </Label>
+                  <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                    {Math.round((config.visuals?.vibrancy ?? 1.0) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1.0"
+                  step="0.01"
+                  value={config.visuals?.vibrancy ?? 1.0}
+                  onChange={(e) =>
+                    handleNestedChange("visuals", "vibrancy", Number(e.target.value))
+                  }
+                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t("settings.vibrancyDesc")}
+                </p>
+              </div>
+
+              <div className="space-y-6 bg-card p-5 rounded-xl border shadow-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <Label className="font-bold text-foreground text-sm uppercase tracking-wider">
+                    {t("settings.glassOpacity")}
+                  </Label>
+                  <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                    {Math.round((config.visuals?.glassOpacity ?? 0.05) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1.0"
+                  step="0.01"
+                  value={config.visuals?.glassOpacity ?? 0.05}
+                  onChange={(e) =>
+                    handleNestedChange("visuals", "glassOpacity", Number(e.target.value))
+                  }
+                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t("settings.glassOpacityDesc")}
+                </p>
               </div>
             </CardContent>
           </Card>
