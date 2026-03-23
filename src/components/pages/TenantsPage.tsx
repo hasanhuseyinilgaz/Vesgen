@@ -209,7 +209,7 @@ export default function TenantsPage({ onSelectTenant }: TenantsPageProps) {
               <Loader2 className="w-12 h-12 animate-spin text-primary" />
             </div>
           ) : tenants.length === 0 ? (
-            <div className="text-center py-32 border-2 border-dashed border-border/40 rounded-3xl bg-background/30 backdrop-blur-md text-muted-foreground flex flex-col items-center justify-center gap-6 animate-in zoom-in-95 duration-500">
+            <div className="text-center py-32 glass-card rounded-3xl border-2 border-dashed border-border/40 text-muted-foreground flex flex-col items-center justify-center gap-6 animate-in zoom-in-95 duration-500">
               <div className="p-6 bg-primary/5 rounded-full border border-primary/10">
                 <Building2 className="w-16 h-16 opacity-20" />
               </div>

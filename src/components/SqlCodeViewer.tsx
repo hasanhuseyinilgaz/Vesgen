@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import Editor, { OnMount, useMonaco } from "@monaco-editor/react";
 import { useTheme } from "@/components/ThemeProvider";
@@ -19,6 +19,7 @@ interface SqlCodeViewerProps {
     procedures: string[];
     columns: string[];
   };
+  targetLine?: { line: number; timestamp: number } | null;
 }
 
 export default function SqlCodeViewer({
@@ -31,11 +32,11 @@ export default function SqlCodeViewer({
   errorLine,
   errorMessage,
   dbSchema = { tables: [], views: [], procedures: [], columns: [] },
+  targetLine,
 }: SqlCodeViewerProps) {
   const { t } = useTranslation();
   const editorRef = useRef<any>(null);
   const monaco = useMonaco();
-  const [isFocused, setIsFocused] = useState(false);
   const providerRef = useRef<any>(null);
 
   const { theme } = useTheme();
@@ -208,18 +209,17 @@ export default function SqlCodeViewer({
 
   const handleMount: OnMount = (editor, m) => {
     editorRef.current = editor;
-    editor.onDidFocusEditorWidget(() => setIsFocused(true));
-    editor.onDidBlurEditorWidget(() => setIsFocused(false));
     if (onEditorMount) onEditorMount(editor, m);
   };
 
+
   useEffect(() => {
-    if (editorRef.current) {
-      editorRef.current.updateOptions({
-        scrollbar: { handleMouseWheel: isFocused },
-      });
+    if (editorRef.current && targetLine) {
+      editorRef.current.revealLineInCenter(targetLine.line);
+      editorRef.current.setPosition({ lineNumber: targetLine.line, column: 1 });
+      editorRef.current.focus();
     }
-  }, [isFocused]);
+  }, [targetLine]);
 
   useEffect(() => {
     if (monaco && editorRef.current) {
@@ -266,8 +266,13 @@ export default function SqlCodeViewer({
           renderLineHighlight: "all",
           fontFamily: "Consolas, 'Courier New', monospace",
           scrollbar: {
-            handleMouseWheel: false,
-            alwaysConsumeMouseWheel: false,
+            vertical: "visible",
+            horizontal: "visible",
+            useShadows: false,
+            verticalHasArrows: false,
+            horizontalHasArrows: false,
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
           },
           suggestOnTriggerCharacters: true,
           quickSuggestions: { other: true, comments: false, strings: false },

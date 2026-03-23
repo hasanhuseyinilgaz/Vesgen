@@ -57,7 +57,13 @@ function App() {
       storageKey={`${APP_INFO.NAME.toLowerCase()}-ui-theme`}
     >
       <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-        <Toaster position="top-right" richColors closeButton />
+        <Toaster
+          position="bottom-right"
+          richColors
+          closeButton={false}
+          swipeDirections={["right"]}
+          toastOptions={{ duration: 3500 }}
+        />
         <Titlebar />
         <div className="flex-1 relative overflow-hidden">
           <Router>

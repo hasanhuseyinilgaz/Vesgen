@@ -42,7 +42,10 @@ export default function SearchableSidebar({
   );
 
   return (
-    <div className="w-80 border-r flex flex-col bg-card shadow-sm z-10 h-full shrink-0">
+    <div 
+      className="w-80 border-r flex flex-col backdrop-blur-xl shadow-sm z-10 h-full shrink-0 overflow-hidden"
+      style={{ backgroundColor: `hsla(var(--card) / var(--glass-opacity))` }}
+    >
       <div className="p-5 border-b space-y-4 shrink-0">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold flex items-center text-primary">

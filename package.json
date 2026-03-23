@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
     "dev:react": "vite",
-    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "dev:electron": "wait-on file:electron/dev-port && electron .",
     "build": "vite build && electron-builder",
     "build:win": "npm run build -- --win --x64",
     "preview": "vite preview"

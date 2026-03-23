@@ -1,7 +1,6 @@
 export const APP_INFO = {
   NAME: __APP_NAME__,
   VERSION: __APP_VERSION__,
-  COMPANY: __APP_AUTHOR__,
   AUTHOR: __APP_AUTHOR__,
   DESCRIPTION: __APP_DESCRIPTION__,
 };

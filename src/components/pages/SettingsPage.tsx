@@ -139,7 +139,7 @@ export default function SettingsPage() {
   if (loading || !config) {
     return (
       <PageLayout>
-        <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground h-full bg-muted/5">
+        <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground h-full bg-transparent">
           <RefreshCw className="w-10 h-10 animate-spin mb-4 opacity-20" />
           <p className="font-medium animate-pulse">
             {t("settings.loadingConfig")}
@@ -190,7 +190,7 @@ export default function SettingsPage() {
 
   return (
     <PageLayout>
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 pb-32 bg-muted/5 custom-scrollbar flex justify-center relative">
+      <div className="flex-1 overflow-y-auto p-6 md:p-10 pb-32 bg-transparent custom-scrollbar flex justify-center relative">
         <div className="max-w-5xl w-full space-y-8 animate-in slide-in-from-bottom-4 fade-in duration-500">
           <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl p-4 -mx-4 sm:-mx-6 px-4 sm:px-6 rounded-2xl border border-border/50 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
             <div>

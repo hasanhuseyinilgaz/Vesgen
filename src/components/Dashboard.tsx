@@ -475,50 +475,58 @@ export default function Dashboard({
           {tenant && (
             <div
               className={cn(
-                "relative flex items-center h-10 transition-all duration-300 rounded-xl",
+                "relative flex items-center transition-all duration-300 w-full rounded-2xl",
                 sidebarOpen
-                  ? "bg-muted/40 border shadow-sm px-2"
-                  : "bg-transparent border-transparent px-0",
+                  ? "bg-muted/40 border shadow-sm p-2"
+                  : "bg-transparent border-transparent p-0 justify-center",
               )}
             >
-              <ActionTooltip
-                label={
-                  !sidebarOpen
-                    ? `${t("dashboard.activeEnv")}: ${tenant.name}`
-                    : ""
-                }
-                side="right"
-              >
-                <div
-                  className={cn(
-                    "absolute transition-all duration-300 cursor-pointer",
-                    sidebarOpen ? "left-2" : "left-1/2 -translate-x-1/2",
-                  )}
-                >
+              {sidebarOpen ? (
                   <div
                     className={cn(
-                      "w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm transition-all duration-300",
-                      tenant.color,
-                      !sidebarOpen && "ring-2 ring-background ring-offset-2 ring-offset-muted/20"
+                      "relative flex items-center gap-3 w-full transition-all duration-300",
                     )}
                   >
-                    {tenant.shortName}
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg transition-all duration-300 relative overflow-hidden shrink-0",
+                      tenant.color,
+                    )}
+                  >
+                    {/* Shine Gradient Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/5 to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 border-t border-l border-white/30 rounded-xl pointer-events-none" />
+                    <span className="relative z-10">{tenant.shortName}</span>
+                  </div>
+
+                  <div className="flex flex-col min-w-0 flex-1 overflow-hidden transition-all duration-300">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-tight truncate">
+                      {t("dashboard.activeEnv")}
+                    </span>
+                    <span className="text-sm font-black text-foreground truncate">
+                      {tenant.name}
+                    </span>
                   </div>
                 </div>
-              </ActionTooltip>
-              <div
-                className={cn(
-                  "absolute left-12 flex flex-col whitespace-nowrap transition-all duration-300",
-                  sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-                )}
-              >
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  {t("dashboard.activeEnv")}
-                </span>
-                <span className="text-sm font-bold text-foreground truncate max-w-[130px]">
-                  {tenant.name}
-                </span>
-              </div>
+              ) : (
+                <ActionTooltip
+                  label={`${t("dashboard.activeEnv")}: ${tenant.name}`}
+                  side="right"
+                >
+                  <div className="flex items-center justify-center w-full">
+                    <div
+                      className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg transition-all duration-300 relative overflow-hidden shrink-0 ring-2 ring-background ring-offset-2 ring-offset-muted/20",
+                        tenant.color,
+                      )}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/5 to-transparent pointer-events-none" />
+                      <div className="absolute inset-0 border-t border-l border-white/30 rounded-xl pointer-events-none" />
+                      <span className="relative z-10">{tenant.shortName}</span>
+                    </div>
+                  </div>
+                </ActionTooltip>
+              )}
             </div>
           )}
         </div>
@@ -637,14 +645,14 @@ export default function Dashboard({
                               label={t("dashboard.dbSettings")}
                               side="top"
                             >
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground shadow-sm bg-background transition-all active:scale-90"
-                                  onClick={openDbSettingsModal}
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground shadow-sm bg-background transition-all active:scale-90"
+                                onClick={openDbSettingsModal}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
                             </ActionTooltip>
                           )}
                         </div>
@@ -1073,37 +1081,14 @@ export default function Dashboard({
         )}>
           <div className={cn(
             "flex gap-2 w-full transition-all duration-300",
-            sidebarOpen ? "flex-col" : "flex-col items-center"
+            sidebarOpen ? "flex-row" : "flex-col items-center"
           )}>
-            <SidebarTooltip label={t("dashboard.settings")}>
-              <Button
-                variant="ghost"
-                className={cn(
-                  "flex items-center justify-start p-0 h-10 font-bold transition-all duration-300 rounded-xl group overflow-hidden bg-primary/10 text-primary hover:bg-primary/20",
-                  sidebarOpen ? "w-full" : "w-10"
-                )}
-                onClick={() => navigate("/dashboard/settings")}
-              >
-                <div className={cn(
-                  "h-full shrink-0 flex items-center justify-center transition-all duration-300",
-                  sidebarOpen ? "w-[48px]" : "w-full"
-                )}>
-                  <Settings className="h-5 w-5" />
-                </div>
-                {sidebarOpen && (
-                  <span className="truncate text-sm pr-3">
-                    {t("dashboard.settings")}
-                  </span>
-                )}
-              </Button>
-            </SidebarTooltip>
-
             <SidebarTooltip label={t("dashboard.backToEnvs")}>
               <Button
                 variant="ghost"
                 className={cn(
                   "flex items-center justify-start p-0 h-10 font-bold transition-all duration-300 rounded-xl group overflow-hidden bg-destructive/10 text-destructive hover:bg-destructive hover:text-white",
-                  sidebarOpen ? "w-full" : "w-10"
+                  sidebarOpen ? "flex-1" : "w-10"
                 )}
                 onClick={handleDisconnect}
               >
@@ -1114,17 +1099,32 @@ export default function Dashboard({
                   <LogOut className="h-5 w-5" />
                 </div>
                 {sidebarOpen && (
-                  <span className="truncate text-sm pr-3">
+                  <span className="truncate text-xs pr-3">
                     {t("dashboard.backToEnvs")}
                   </span>
                 )}
+              </Button>
+            </SidebarTooltip>
+
+            <SidebarTooltip label={t("dashboard.settings")}>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "flex items-center justify-center p-0 h-10 transition-all duration-300 rounded-xl group overflow-hidden bg-primary/10 text-primary hover:bg-primary/20",
+                  sidebarOpen ? "w-10" : "w-10"
+                )}
+                onClick={() => navigate("/dashboard/settings")}
+              >
+                <div className="h-full w-full flex items-center justify-center">
+                  <Settings className="h-5 w-5" />
+                </div>
               </Button>
             </SidebarTooltip>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 overflow-hidden bg-muted/10 relative flex flex-col">
+      <main className="flex-1 min-w-0 overflow-hidden bg-transparent relative flex flex-col">
         {isConnectingDb ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
             <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />

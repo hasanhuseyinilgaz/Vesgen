@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { exportToExcel } from "@/lib/exportUtils";
 import { useTableData } from "@/hooks/useTableData";
-import FilterPanel from "@/components/FilterPanel";
+import DataSelectionPanel from "@/components/DataSelectionPanel";
 import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
 import DataTable from "@/components/DataTable";
 import SqlCodeViewer from "@/components/SqlCodeViewer";
@@ -20,6 +20,7 @@ import SearchableSidebar from "@/components/SearchableSidebar";
 import CustomTabs from "@/components/CustomTabs";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
+import { useSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
 
 import {
@@ -47,8 +48,8 @@ export default function ViewsPage() {
   });
 
   const {
-    data: viewData,
-    columns: columnsData,
+    data: tableData,
+    columns: columns,
     loading,
     setLoading,
     activeItem: selectedView,
@@ -63,17 +64,20 @@ export default function ViewsPage() {
     setShowLivePanel,
     isLiveActive,
     setIsLiveActive,
-    loadData: loadViewData,
+    loadData: loadTableData,
     handleSort,
     resetState,
   } = useTableData({
-    fetchDataApi: (window as any).electronAPI?.dbGetTableData,
-    fetchColumnsApi: (window as any).electronAPI?.dbGetTableColumns,
+    fetchDataApi: (window as any).electronAPI.dbGetTableData,
+    fetchColumnsApi: (window as any).electronAPI.dbGetTableColumns,
   });
+
+  const { config, loadConfig } = useSettings();
 
   useEffect(() => {
     loadViews();
-  }, []);
+    loadConfig();
+  }, [loadConfig]);
 
   useEffect(() => {
     if (selectedView) {
@@ -111,12 +115,12 @@ export default function ViewsPage() {
 
   const handleViewSelect = (viewName: string) => {
     resetState();
-    loadViewData(viewName, "", null);
+    loadTableData(viewName, "", null);
     setActiveTab("data");
   };
 
   const handleExportExcel = () => {
-    if (!viewData?.length) {
+    if (!tableData?.length) {
       setUpdateResultModal({
         isOpen: true,
         success: false,
@@ -124,7 +128,7 @@ export default function ViewsPage() {
       });
       return;
     }
-    exportToExcel(viewData, `View_${selectedView}`);
+    exportToExcel(tableData, `View_${selectedView}`);
   };
 
   return (
@@ -141,7 +145,7 @@ export default function ViewsPage() {
         />
       }
     >
-      <div className="flex flex-col h-full bg-background overflow-hidden">
+      <div className="flex flex-col h-full bg-transparent overflow-hidden">
         <div
           className={cn(
             "flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full",
@@ -159,26 +163,26 @@ export default function ViewsPage() {
               },
               {
                 label: "MODE",
-                value: activeTab === "data" 
-                  ? `${viewData.length} ${t("components.dataToolbar.records").toUpperCase()}`
+                value: activeTab === "data"
+                  ? `${tableData.length} ${t("components.dataToolbar.records").toUpperCase()}`
                   : t("views.tabCode").toUpperCase(),
               },
             ] : undefined}
-            recordCount={selectedView ? viewData.length : undefined}
+            recordCount={selectedView ? tableData.length : undefined}
             topRows={topRows}
             onTopRowsChange={selectedView ? (val) => {
               setTopRows(val);
-              loadViewData(selectedView, activeWhereClause, sortConfig);
+              loadTableData(selectedView, activeWhereClause, sortConfig);
             } : undefined}
             onRefresh={selectedView ? () =>
-              loadViewData(selectedView, activeWhereClause, sortConfig) : undefined
+              loadTableData(selectedView, activeWhereClause, sortConfig) : undefined
             }
             showFilter={showFilter}
             onToggleFilter={() => {
               setShowLivePanel(false);
               setShowFilter(!showFilter);
             }}
-            isFilterActive={activeWhereClause.trim().length > 0}
+            isFilterActive={activeWhereClause.trim().length > 0 || activeJoins.length > 0}
             showFilterButton={!!selectedView && activeTab === "data"}
             showLiveButton={!!selectedView && activeTab === "data"}
             showRefreshButton={!!selectedView}
@@ -197,24 +201,23 @@ export default function ViewsPage() {
           {selectedView ? (
             <>
               <div className={cn("mt-0", !showFilter && "hidden")}>
-                <FilterPanel
+                <DataSelectionPanel
                   tableName={selectedView}
-                  columns={columnsData}
+                  columns={columns}
                   allTables={views.map(v => ({ TABLE_NAME: v.TABLE_NAME }))}
                   isApplied={activeWhereClause.trim().length > 0 || activeJoins.length > 0}
                   onApplyFilter={(wc, joins) =>
-                    loadViewData(selectedView, wc, sortConfig, false, joins)
+                    loadTableData(selectedView, wc, sortConfig, false, joins)
                   }
                   onClearFilter={() =>
-                    loadViewData(selectedView, "", sortConfig, false, [])
+                    loadTableData(selectedView, "", sortConfig, false, [])
                   }
                 />
               </div>
               <div className={cn("mt-0", !showLivePanel && "hidden")}>
                 <LiveMonitoringPanel
-                  isVisible={showLivePanel}
                   onRefresh={() =>
-                    loadViewData(
+                    loadTableData(
                       selectedView,
                       activeWhereClause,
                       sortConfig,
@@ -223,13 +226,13 @@ export default function ViewsPage() {
                   }
                   onStatusChange={setIsLiveActive}
                   onAutoSort={() => {
-                    const primaryKeyCol = columnsData.find(
+                    const primaryKeyCol = columns.find(
                       (c: any) => c.IS_PRIMARY_KEY === true || c.IS_PRIMARY_KEY === 1
                     );
 
                     const sortColumn = primaryKeyCol
                       ? primaryKeyCol.COLUMN_NAME
-                      : columnsData[0]?.COLUMN_NAME;
+                      : columns[0]?.COLUMN_NAME;
 
                     if (sortColumn) {
                       handleSort(sortColumn, "DESC");
@@ -255,8 +258,8 @@ export default function ViewsPage() {
               >
                 {activeTab === "data" ? (
                   <DataTable
-                    data={viewData}
-                    columns={columnsData.map((c: any) => ({
+                    data={tableData}
+                    columns={columns.map((c: any) => ({
                       name: c.COLUMN_NAME,
                       type: c.DATA_TYPE,
                       isIdentity: c.IS_IDENTITY === 1,
@@ -264,9 +267,10 @@ export default function ViewsPage() {
                     title={selectedView}
                     sortConfig={sortConfig}
                     onSort={handleSort}
+                    defaultPageSize={config?.ui?.table?.defaultPageSize}
                   />
                 ) : (
-                  <div className="h-full border rounded-xl overflow-hidden shadow-sm bg-muted/5">
+                  <div className="h-full border rounded-xl overflow-hidden bg-muted/5">
                     <SqlCodeViewer code={viewDefinition} wordWrap="off" />
                   </div>
                 )}

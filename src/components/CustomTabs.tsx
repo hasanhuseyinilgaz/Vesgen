@@ -19,7 +19,10 @@ export default function CustomTabs({
   tabs,
 }: CustomTabsProps) {
   return (
-    <div className="flex space-x-2 bg-muted/50 p-1 rounded-lg w-fit shrink-0 border border-border/40">
+    <div 
+      className="flex space-x-2 p-1 rounded-lg w-fit shrink-0 border border-white/5 backdrop-blur-lg shadow-sm transition-all duration-300"
+      style={{ backgroundColor: `hsla(var(--muted) / var(--glass-opacity))` }}
+    >
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.value;

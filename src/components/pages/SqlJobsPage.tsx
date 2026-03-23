@@ -314,7 +314,7 @@ export default function SqlJobsPage() {
 
   return (
     <PageLayout>
-      <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+      <div className="flex flex-col h-full bg-transparent overflow-hidden w-full">
         <div className="flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
           <PageHeader
             title={t("jobs.title")}
@@ -332,7 +332,7 @@ export default function SqlJobsPage() {
                   placeholder={t("jobs.searchPlaceholder")}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-48 sm:w-64 bg-card border-border/50 h-9"
+                  className="w-48 sm:w-64 glass-card border-border/50 h-9"
                 />
                 <ActionTooltip label={t("common.refresh")} side="bottom">
                   <Button
@@ -358,10 +358,10 @@ export default function SqlJobsPage() {
               </div>
             }
           />
-          <Card className="border-border/50 shadow-sm overflow-hidden bg-card">
+          <Card className="border-border/50 shadow-sm overflow-hidden glass-card">
             <CardContent className="p-0">
               <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-muted/50 border-b border-border/50">
+                <thead className="bg-card/95 border-b border-border/50 backdrop-blur-sm">
                   <tr>
                     <th className="px-5 py-4 font-semibold text-muted-foreground w-40">
                       {t("jobs.status")}
@@ -390,10 +390,8 @@ export default function SqlJobsPage() {
                       <tr
                         key={job.JobId}
                         className={cn(
-                          "transition-all duration-200",
-                          job.IsEnabled
-                            ? "hover:bg-muted/30"
-                            : "opacity-60 bg-muted/10",
+                          "transition-all duration-200 table-row-solid",
+                          !job.IsEnabled && "opacity-60 bg-muted/10",
                         )}
                       >
                         <td className="px-5 py-3">
@@ -576,7 +574,7 @@ export default function SqlJobsPage() {
         }
       >
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background border-border shadow-2xl">
-          <DialogHeader className="p-6 border-b bg-card shrink-0 shadow-sm z-10">
+          <DialogHeader className="p-6 border-b glass-card shrink-0 shadow-sm z-10 rounded-none">
             <DialogTitle className="flex items-center gap-2">
               <ServerCog className="w-5 h-5 text-primary" />
               {editorModal.isEdit ? t("jobs.editJob") : t("jobs.createJob")}
@@ -652,7 +650,7 @@ export default function SqlJobsPage() {
                 {editorModal.data.steps.map((s: any, idx: number) => (
                   <Card
                     key={s.id}
-                    className="relative border-border/60 shadow-md"
+                    className="relative border-border/60 shadow-md glass-card"
                   >
                     <CardContent className="p-6 space-y-4">
                       <div className="flex justify-between items-center">
@@ -769,7 +767,7 @@ export default function SqlJobsPage() {
                   editorModal.data.schedules.map((sch: any) => (
                     <Card
                       key={sch.id}
-                      className="relative border-border/60 shadow-md"
+                      className="relative border-border/60 shadow-md glass-card"
                     >
                       <CardContent className="p-6 space-y-6">
                         <div className="flex items-center gap-3 border-b pb-4">

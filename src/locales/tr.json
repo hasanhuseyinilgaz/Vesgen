@@ -76,6 +76,10 @@
     "noData": "Tablo verisi dönmedi (Boş sonuç).",
     "sqlErrorOutput": "SQL Hata Çıktısı",
     "line": "Satır:",
+    "results": "Sonuçlar",
+    "messages": "Mesajlar",
+    "noMessages": "Yazdırılacak mesaj yok.",
+    "executionFinished": "Sorgu yürütme tamamlandı.",
     "saveQueryTitle": "Sorguyu Kaydet",
     "saveQueryDesc": "Yazdığınız kodu daha sonra tekrar kullanmak için isimlendirin.",
     "queryNameLabel": "Sorgu Adı",
@@ -370,13 +374,13 @@
       "records": "Kayıt",
       "firstN": "İlk {{count}}",
       "liveMonitorMode": "Canlı İzleme Modu",
-      "filtering": "Filtreleme",
+      "dataSelection": "Veri Seçimi",
       "downloadExcel": "Excel/XLSX Olarak İndir",
       "loading": "Yükleniyor",
       "refresh": "Yenile"
     },
-    "filterPanel": {
-      "title": "Detaylı Filtreleme (AND/OR)",
+    "dataSelectionPanel": {
+      "title": "Detaylı Veri Seçimi",
       "reset": "Sıfırla",
       "column": "Sütun",
       "searchColumn": "Sütun ara ve seç...",

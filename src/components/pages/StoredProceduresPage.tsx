@@ -37,7 +37,7 @@ import SearchableSidebar from "@/components/SearchableSidebar";
 import CustomTabs from "@/components/CustomTabs";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
-
+import { useSettings } from "@/hooks/useSettings";
 import ActionTooltip from "@/components/ActionTooltip";
 
 export interface StoredProcedure {
@@ -73,10 +73,13 @@ export default function StoredProceduresPage() {
     message: "",
   });
 
+  const { config, loadConfig } = useSettings();
+
   useEffect(() => {
     loadProcedures();
     loadPresets();
-  }, []);
+    loadConfig();
+  }, [loadConfig]);
 
   const loadProcedures = async () => {
     setLoading(true);
@@ -279,27 +282,6 @@ export default function StoredProceduresPage() {
     exportToExcel(result.data, `SP_${selectedSP}`);
   };
 
-  const handleSort = (column: string, direction: SortDirection) => {
-    setSortConfig({ column, direction });
-    if (result?.data) {
-      const sorted = [...result.data].sort((a, b) => {
-        const valA = a[column];
-        const valB = b[column];
-        if (valA === valB) return 0;
-        if (valA === null) return direction === "ASC" ? -1 : 1;
-        if (valB === null) return direction === "ASC" ? 1 : -1;
-        return direction === "ASC"
-          ? valA < valB
-            ? -1
-            : 1
-          : valA > valB
-            ? -1
-            : 1;
-      });
-      setResult({ ...result, data: sorted });
-    }
-  };
-
   return (
     <PageLayout
       sidebar={
@@ -317,7 +299,7 @@ export default function StoredProceduresPage() {
         />
       }
     >
-      <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+      <div className="flex flex-col h-full bg-transparent overflow-hidden w-full">
         <div
           className={cn(
             "flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full",
@@ -514,16 +496,30 @@ export default function StoredProceduresPage() {
                       <div className="bg-muted/5">
                         {result.success ? (
                           result.data?.length > 0 ? (
-                            <DataTable
-                              data={result.data}
-                              columns={Object.keys(result.data[0]).map((k) => ({
-                                name: k,
-                              }))}
-                              title=""
-                              sortConfig={sortConfig}
-                              onSort={handleSort}
-                              className="border-0 rounded-none shadow-none"
-                            />
+                      <DataTable
+                        data={result.data}
+                        columns={Object.keys(result.data[0] || {}).map((key) => ({
+                          name: key,
+                        }))}
+                        title={selectedSP || ""}
+                        sortConfig={sortConfig}
+                        onSort={(col, dir) => {
+                          setSortConfig({ column: col, direction: dir });
+                          const sorted = [...(result.data || [])].sort((a, b) => {
+                            const valA = a[col];
+                            const valB = b[col];
+                            if (valA === valB) return 0;
+                            if (valA === null) return dir === "ASC" ? -1 : 1;
+                            if (valB === null) return dir === "ASC" ? 1 : -1;
+                            return dir === "ASC"
+                              ? valA < valB ? -1 : 1
+                              : valA > valB ? -1 : 1;
+                          });
+                          setResult({ ...result, data: sorted });
+                        }}
+                        defaultPageSize={config?.ui?.table?.defaultPageSize}
+                        className="border-0 rounded-none shadow-none"
+                      />
                           ) : (
                             <div className="p-12 text-center text-muted-foreground flex flex-col items-center">
                               <Database className="w-12 h-12 mb-3 opacity-20" />

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Maximize2,
   Key,
@@ -28,6 +29,13 @@ import { cn } from "@/lib/utils";
 import PasswordModal from "@/components/PasswordModal";
 import ActionTooltip from "@/components/ActionTooltip";
 import ColumnManager from "@/components/ColumnManager";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search as SearchIcon } from "lucide-react";
 
 export interface DataTableColumn {
@@ -55,6 +63,7 @@ interface DataTableProps {
     updatedRecord: any,
   ) => Promise<boolean>;
   enableUpdate?: boolean;
+  defaultPageSize?: number;
 }
 
 const isDateColumn = (type?: string) => {
@@ -73,7 +82,6 @@ const formatToDatetimeLocal = (val: any) => {
     d.getDate(),
   )}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
-
 const safeStringify = (obj: any) => {
   try {
     return JSON.stringify(obj, (_key, value) =>
@@ -83,6 +91,22 @@ const safeStringify = (obj: any) => {
     console.error("Stringify error:", e);
     return "";
   }
+};
+const isLongTextField = (name: string, type?: string, value?: string) => {
+  const n = name.toLowerCase();
+  const t = type?.toLowerCase() || "";
+  return (
+    t.includes("max") ||
+    t.includes("text") ||
+    t.includes("xml") ||
+    n.includes("sql") ||
+    n.includes("desc") ||
+    n.includes("comment") ||
+    n.includes("note") ||
+    n.includes("query") ||
+    (value && value.length > 50) ||
+    (value && value.includes("\n"))
+  );
 };
 
 export default function DataTable({
@@ -94,13 +118,21 @@ export default function DataTable({
   onSort,
   onUpdateRecord,
   enableUpdate = false,
+  defaultPageSize = 20,
 }: DataTableProps) {
   const { t } = useTranslation();
   const safeData = Array.isArray(data) ? data : [];
   const safeColumns = Array.isArray(columns) ? columns : [];
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSizeInput, setPageSizeInput] = useState("20");
+  const [pageSizeInput, setPageSizeInput] = useState(defaultPageSize.toString());
+
+  // Update page size if prop changes (e.g. after async config load)
+  useEffect(() => {
+    if (defaultPageSize) {
+      setPageSizeInput(defaultPageSize.toString());
+    }
+  }, [defaultPageSize]);
 
   const [selectedRowData, setSelectedRowData] = useState<any | null>(null);
   const [editData, setEditData] = useState<any | null>(null);
@@ -150,7 +182,7 @@ export default function DataTable({
       });
       setVisibleColumns(initialVisible);
     }
-    
+
     // Satır seçimlerini ve sayfayı da sıfırla
     setCurrentPage(1);
     setSelectedRowData(null);
@@ -197,8 +229,8 @@ export default function DataTable({
 
   const orderedColumns = columnOrder.length > 0
     ? columnOrder
-        .map((name) => safeColumns.find((c) => c.name === name))
-        .filter(Boolean) as DataTableColumn[]
+      .map((name) => safeColumns.find((c) => c.name === name))
+      .filter(Boolean) as DataTableColumn[]
     : safeColumns;
 
   const finalColumns = orderedColumns.filter(
@@ -245,22 +277,6 @@ export default function DataTable({
     currentPage * itemsPerPage,
   );
 
-  const handlePageSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-    if (val === "") {
-      setPageSizeInput("");
-      return;
-    }
-    let num = parseInt(val, 10);
-    if (num > 200) num = 200;
-    setPageSizeInput(num.toString());
-  };
-
-  const handlePageSizeBlur = () => {
-    if (pageSizeInput === "" || parseInt(pageSizeInput, 10) < 1) {
-      setPageSizeInput("20");
-    }
-  };
 
   const handleSortClick = (columnName: string) => {
     if (!onSort) return;
@@ -384,9 +400,10 @@ export default function DataTable({
   return (
     <div
       className={cn(
-        "bg-card/30 glass border rounded-xl flex flex-col w-full overflow-hidden relative z-0 shadow-lg",
+        "glass-card glass border rounded-xl flex flex-col w-full overflow-hidden relative z-0",
         className,
       )}
+      style={{ backgroundColor: `hsla(var(--card) / var(--glass-opacity))` }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none -z-10" />
 
@@ -413,8 +430,8 @@ export default function DataTable({
 
       <div className="w-full overflow-x-auto relative">
         <table className="min-w-full text-sm text-left border-collapse">
-          <thead className="sticky top-0 z-10 shadow-sm">
-            <tr className="bg-muted/95 backdrop-blur-md">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-muted border-b">
               <th className="w-10 px-4 py-3 border-b"></th>
               {finalColumns.map((col) => (
                 <th
@@ -461,7 +478,7 @@ export default function DataTable({
               <tr>
                 <td
                   colSpan={safeColumns.length + 1}
-                  className="px-4 py-12 text-center text-muted-foreground"
+                  className="px-4 py-12 text-center text-muted-foreground bg-card"
                 >
                   <Database className="w-8 h-8 mx-auto mb-3 opacity-20" />
                   {t("components.dataTable.noData")}
@@ -476,18 +493,16 @@ export default function DataTable({
                   <tr
                     key={idx}
                     className={cn(
-                      "transition-all duration-1000 cursor-pointer group",
-                      isHighlighted
-                        ? "bg-info/10 hover:bg-info/20"
-                        : "hover:bg-primary/5 bg-transparent",
+                      "transition-all duration-1000 cursor-pointer group border-b border-border/10 table-row-solid",
+                      isHighlighted && "highlighted",
                     )}
                   >
                     <td
                       className={cn(
                         "px-4 py-2 border-b text-muted-foreground/50 transition-colors",
                         isHighlighted
-                          ? "bg-transparent text-info"
-                          : "group-hover:text-primary bg-background/50",
+                          ? "bg-transparent text-info font-bold"
+                          : "group-hover:text-primary bg-card/50",
                       )}
                       onClick={() => openRowDetail(row)}
                     >
@@ -543,7 +558,7 @@ export default function DataTable({
       </div>
 
       {filteredData.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between px-6 py-3 bg-muted/30 border-t shrink-0 gap-4">
+        <div className="flex flex-wrap items-center justify-between px-6 py-3 bg-muted border-t shrink-0 gap-4">
           <div className="text-sm text-muted-foreground">
             {t("components.dataTable.totalRecords")}{" "}
             <span className="font-medium text-foreground">
@@ -562,13 +577,29 @@ export default function DataTable({
               <Label className="text-xs text-muted-foreground whitespace-nowrap">
                 {t("components.dataTable.rowsPerPage")}
               </Label>
-              <Input
-                type="number"
+              <Select
                 value={pageSizeInput}
-                onChange={handlePageSizeChange}
-                onBlur={handlePageSizeBlur}
-                className="h-8 w-16 text-xs bg-background text-center font-medium"
-              />
+                onValueChange={(val) => {
+                  setPageSizeInput(val);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[70px] text-xs bg-background font-medium focus:ring-primary">
+                  <SelectValue placeholder={pageSizeInput} />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    ...new Set(["10", "20", "50", "100", "200", pageSizeInput]),
+                  ]
+                    .filter((v) => !!v)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((val) => (
+                      <SelectItem key={val} value={val}>
+                        {val}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -649,7 +680,7 @@ export default function DataTable({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {safeColumns.map((col) => {
                 const val = editData?.[col.name];
-                const displayVal = val === null ? "" : val?.toString() || "";
+                const displayVal = (val === null || val === undefined) ? "" : String(val);
                 const isError = !!validationErrors[col.name];
                 const isDate = isDateColumn(col.type);
 
@@ -676,36 +707,66 @@ export default function DataTable({
                             {col.type}
                           </span>
                         )}
-                        {selectedRowData?.[col.name] === null && (
+                        {selectedRowData?.[col.name] === null || selectedRowData?.[col.name] === undefined ? (
                           <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-medium bg-muted text-muted-foreground uppercase border border-border">
                             NULL
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="relative">
-                      <Input
-                        type={isDate ? "datetime-local" : "text"}
-                        step={isDate ? "1" : undefined}
-                        value={displayVal}
-                        disabled={col.isIdentity || !enableUpdate}
-                        onChange={(e) =>
-                          handleInputChange(col.name, e.target.value, col.type)
-                        }
-                        className={cn(
-                          "bg-card font-medium focus-visible:ring-primary",
-                          (col.isIdentity || !enableUpdate) &&
+                      {isLongTextField(col.name, col.type, displayVal) ? (
+                        <Textarea
+                          value={displayVal}
+                          disabled={col.isIdentity || !enableUpdate}
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = `${Math.max(42, el.scrollHeight)}px`;
+                            }
+                          }}
+                          onChange={(e) => {
+                            handleInputChange(col.name, e.target.value, col.type);
+                            e.target.style.height = "auto";
+                            e.target.style.height = `${e.target.scrollHeight}px`;
+                          }}
+                          className={cn(
+                            "bg-card font-medium focus-visible:ring-primary py-2 resize-none overflow-hidden custom-scrollbar",
+                            (col.isIdentity || !enableUpdate) &&
                             "bg-muted/50 text-muted-foreground cursor-not-allowed border-transparent shadow-none",
-                          isError &&
+                            isError &&
                             "border-destructive focus-visible:ring-destructive",
-                        )}
-                        placeholder={
-                          selectedRowData?.[col.name] === null
-                            ? t("components.dataTable.nullData")
-                            : ""
-                        }
-                      />
+                          )}
+                          placeholder={
+                            selectedRowData?.[col.name] === null
+                              ? t("components.dataTable.nullData")
+                              : ""
+                          }
+                        />
+                      ) : (
+                        <Input
+                          type={isDate ? "datetime-local" : "text"}
+                          step={isDate ? "1" : undefined}
+                          value={displayVal}
+                          disabled={col.isIdentity || !enableUpdate}
+                          onChange={(e) =>
+                            handleInputChange(col.name, e.target.value, col.type)
+                          }
+                          className={cn(
+                            "bg-card font-medium focus-visible:ring-primary",
+                            (col.isIdentity || !enableUpdate) &&
+                            "bg-muted/50 text-muted-foreground cursor-not-allowed border-transparent shadow-none",
+                            isError &&
+                            "border-destructive focus-visible:ring-destructive",
+                          )}
+                          placeholder={
+                            selectedRowData?.[col.name] === null
+                              ? t("components.dataTable.nullData")
+                              : ""
+                          }
+                        />
+                      )}
                       {isError && (
                         <div
                           className="absolute right-2 top-2.5 text-destructive"

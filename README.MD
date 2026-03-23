@@ -107,6 +107,6 @@ npm run dev
 <p align="center">
 <i>Engineered for reliability by <b>lizoco</b></i>
 
-<code>v1.0.0-dev</code>
+<code>v1.0.1-dev</code>
 
 </p>

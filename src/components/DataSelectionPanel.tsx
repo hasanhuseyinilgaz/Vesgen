@@ -41,6 +41,8 @@ import ActionTooltip from "@/components/ActionTooltip";
 export interface FilterColumn {
   COLUMN_NAME: string;
   DATA_TYPE: string;
+  tableName?: string;
+  originalName?: string;
 }
 
 export interface FilterRule {
@@ -60,7 +62,7 @@ export interface JoinRule {
   targetColumn: string;
 }
 
-interface FilterPanelProps {
+interface DataSelectionPanelProps {
   tableName: string;
   columns: FilterColumn[];
   allTables?: { TABLE_NAME: string }[];
@@ -69,14 +71,14 @@ interface FilterPanelProps {
   onClearFilter: () => void;
 }
 
-export default function FilterPanel({
+export default function DataSelectionPanel({
   tableName,
   columns,
   allTables = [],
   isApplied = false,
   onApplyFilter,
   onClearFilter,
-}: FilterPanelProps) {
+}: DataSelectionPanelProps) {
   const { t } = useTranslation();
 
   const [rules, setRules] = useState<FilterRule[]>([]);
@@ -137,24 +139,24 @@ export default function FilterPanel({
 
       if (isCompletelyEmpty) {
         if (rules.length > 1) {
-          toast.error(t("components.filterPanel.validationEmptyRule"));
+          toast.error(t("components.dataSelectionPanel.validationEmptyRule"));
           return;
         } else if (joins.length === 0) {
           // Eğer sadece 1 kural varsa ve tamamen boşsa, VE join de yoksa kullanıcı filtrelemek istiyor ama hiçbir şey seçmemiş demektir.
-          toast.error(t("components.filterPanel.validationColRequired"));
+          toast.error(t("components.dataSelectionPanel.validationColRequired"));
           return;
         }
         continue;
       }
 
       if (!rule.column) {
-        toast.error(t("components.filterPanel.validationColRequired"));
+        toast.error(t("components.dataSelectionPanel.validationColRequired"));
         return;
       }
 
       if (rule.operator === "BETWEEN") {
         if (!rule.value || !rule.value2) {
-          toast.error(t("components.filterPanel.validationValRequired"));
+          toast.error(t("components.dataSelectionPanel.validationValRequired"));
           return;
         }
       } else {
@@ -162,7 +164,7 @@ export default function FilterPanel({
           rule.operator,
         );
         if (requireValue && !rule.value) {
-          toast.error(t("components.filterPanel.validationValRequired"));
+          toast.error(t("components.dataSelectionPanel.validationValRequired"));
           return;
         }
       }
@@ -171,7 +173,7 @@ export default function FilterPanel({
     // Validate joins
     for (const join of joins) {
       if (!join.targetTable || !join.localColumn || !join.targetColumn) {
-        toast.error(t("components.filterPanel.validationJoinRequired"));
+        toast.error(t("components.dataSelectionPanel.validationJoinRequired"));
         return;
       }
     }
@@ -197,21 +199,22 @@ export default function FilterPanel({
         const formatValue = (val: string) =>
           isString ? `'${val.replace(/'/g, "''")}'` : val;
 
-        const tablePrefix = validJoins.length > 0 ? `[${tableName}].` : "";
+        const tablePrefix = validJoins.length > 0 && colMeta?.tableName ? `[${colMeta.tableName}].` : "";
+        const colName = colMeta?.originalName || rule.column;
         let condition = "";
 
         if (rule.operator === "BETWEEN" && rule.value2) {
-          condition = `${tablePrefix}[${rule.column}] BETWEEN ${formatValue(rule.value)} AND ${formatValue(rule.value2)}`;
+          condition = `${tablePrefix}[${colName}] BETWEEN ${formatValue(rule.value)} AND ${formatValue(rule.value2)}`;
         } else if (rule.operator === "LIKE") {
-          condition = `${tablePrefix}[${rule.column}] LIKE '%${rule.value.replace(/'/g, "''")}%'`;
+          condition = `${tablePrefix}[${colName}] LIKE '%${rule.value.replace(/'/g, "''")}%'`;
         } else if (rule.operator === "IN") {
           const inValues = rule.value
             .split(",")
             .map((v) => formatValue(v.trim()))
             .join(",");
-          condition = `${tablePrefix}[${rule.column}] IN (${inValues})`;
+          condition = `${tablePrefix}[${colName}] IN (${inValues})`;
         } else {
-          condition = `${tablePrefix}[${rule.column}] ${rule.operator} ${formatValue(rule.value)}`;
+          condition = `${tablePrefix}[${colName}] ${rule.operator} ${formatValue(rule.value)}`;
         }
 
         if (idx === 0) return condition;
@@ -301,50 +304,43 @@ export default function FilterPanel({
   return (
     <div
       className={cn(
-        "space-y-4 p-5 border shadow-sm rounded-xl mb-4 transition-all duration-300",
+        "space-y-4 p-5 border rounded-xl mb-4 transition-all duration-300",
         isApplied
           ? "border-warning/30 bg-warning/5"
           : "border-border/50 bg-card",
       )}
     >
-      {(rules.length > 0 || joins.length > 0) && (
-        <div className="flex items-center justify-between pb-3 border-b border-border/50">
-          <h3 className="text-sm font-semibold text-foreground flex items-center">
-            <ActionTooltip label={t("components.filterPanel.title")} side="top">
-              <Search className="w-4 h-4 mr-2 text-warning cursor-help" />
-            </ActionTooltip>
-            {rules.length > 0 || joins.length > 0
-              ? t("components.filterPanel.panelTitle")
-              : t("components.filterPanel.panelTitle")}
-          </h3>
-          <ActionTooltip label={t("components.filterPanel.reset")} side="left">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleReset}
-              className="h-8 text-muted-foreground hover:text-foreground hover:bg-muted"
-            >
-              <X className="w-3.5 h-3.5 mr-1.5" />{" "}
-              {t("components.filterPanel.reset")}
-            </Button>
-          </ActionTooltip>
-        </div>
-      )}
+      <div className="flex items-center justify-between pb-3 border-b border-border/50">
+        <h3 className="text-sm font-semibold text-foreground flex items-center">
+          <Search className="w-4 h-4 mr-2 text-warning cursor-help" />
+          {t("components.dataSelectionPanel.panelTitle")}
+        </h3>
+        {(rules.length > 0 || joins.length > 0) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            className="h-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            <X className="w-3.5 h-3.5 mr-1.5" /> {t("components.dataSelectionPanel.reset")}
+          </Button>
+        )}
+      </div>
 
       {rules.length === 0 && joins.length === 0 && (
         <div className="py-8 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/40 rounded-lg bg-muted/5">
           <Search className="w-8 h-8 mb-2 opacity-20" />
-          <p className="text-sm">{t("components.filterPanel.emptyState")}</p>
+          <p className="text-sm">{t("components.dataSelectionPanel.emptyState")}</p>
         </div>
       )}
 
       {(rules.length > 0 || joins.length > 0) && (
         <div className="pt-2">
           {rules.length > 0 && (
-            <div className="space-y-4 relative border-l-2 border-info/30 pl-4 ml-2 my-2 mb-6">
+            <div className="space-y-4 relative border-l-2 border-warning/30 pl-4 ml-2 my-2 mb-6">
               <h4 className="text-xs font-medium text-muted-foreground mb-4 flex items-center gap-2">
-                <Filter className="w-3.5 h-3.5" />
-                {t("components.filterPanel.rulesSectionTitle")}
+                <Filter className="w-3.5 h-3.5 text-warning" />
+                {t("components.dataSelectionPanel.rulesSectionTitle")}
               </h4>
               {rules.map((rule, index) => (
                 <div
@@ -374,42 +370,37 @@ export default function FilterPanel({
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground block">
                       {tableName
                         ? `${tableName} Kolonu`
-                        : t("components.filterPanel.column")}
+                        : t("components.dataSelectionPanel.column")}
                     </Label>
                     <Popover
                       open={openComboboxes[rule.id] || false}
                       onOpenChange={(open) => toggleCombobox(rule.id, open)}
                     >
-                      <ActionTooltip
-                        label={t("components.filterPanel.searchColumn")}
-                        side="top"
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={openComboboxes[rule.id]}
-                            className="h-9 w-full justify-between font-normal bg-background"
-                          >
-                            {rule.column
-                              ? columns.find(
-                                (col) => col.COLUMN_NAME === rule.column,
-                              )?.COLUMN_NAME
-                              : t("components.filterPanel.searchColumn")}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                      </ActionTooltip>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openComboboxes[rule.id]}
+                          className="h-9 w-full justify-between font-normal bg-background"
+                        >
+                          {rule.column
+                            ? columns.find(
+                              (col) => col.COLUMN_NAME === rule.column,
+                            )?.COLUMN_NAME
+                            : t("components.dataSelectionPanel.searchColumn")}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
                       <PopoverContent className="w-[300px] p-0" align="start">
                         <Command>
                           <CommandInput
                             placeholder={t(
-                              "components.filterPanel.searchPlaceholder",
+                              "components.dataSelectionPanel.searchPlaceholder",
                             )}
                           />
                           <CommandList>
                             <CommandEmpty>
-                              {t("components.filterPanel.columnNotFound")}
+                              {t("components.dataSelectionPanel.columnNotFound")}
                             </CommandEmpty>
                             <CommandGroup>
                               {columns.map((col) => (
@@ -447,55 +438,48 @@ export default function FilterPanel({
 
                   <div className="w-[140px]">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">
-                      {t("components.filterPanel.operator")}
+                      {t("components.dataSelectionPanel.operator")}
                     </Label>
-                    <ActionTooltip
-                      label={t("components.filterPanel.operator")}
-                      side="top"
+                    <Select
+                      value={rule.operator}
+                      onValueChange={(val) =>
+                        updateRule(rule.id, "operator", val)
+                      }
                     >
-                      <div className="cursor-help">
-                        <Select
-                          value={rule.operator}
-                          onValueChange={(val) =>
-                            updateRule(rule.id, "operator", val)
-                          }
-                        >
-                          <SelectTrigger className="bg-background h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="=">
-                              {t("components.filterPanel.opEquals")}
-                            </SelectItem>
-                            <SelectItem value="!=">
-                              {t("components.filterPanel.opNotEquals")}
-                            </SelectItem>
-                            <SelectItem value=">">
-                              {t("components.filterPanel.opGreater")}
-                            </SelectItem>
-                            <SelectItem value="<">
-                              {t("components.filterPanel.opLess")}
-                            </SelectItem>
-                            <SelectItem value="LIKE">
-                              {t("components.filterPanel.opLike")}
-                            </SelectItem>
-                            <SelectItem value="BETWEEN">
-                              {t("components.filterPanel.opBetween")}
-                            </SelectItem>
-                            <SelectItem value="IN">
-                              {t("components.filterPanel.opIn")}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </ActionTooltip>
+                      <SelectTrigger className="bg-background h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="=">
+                          {t("components.dataSelectionPanel.opEquals")}
+                        </SelectItem>
+                        <SelectItem value="!=">
+                          {t("components.dataSelectionPanel.opNotEquals")}
+                        </SelectItem>
+                        <SelectItem value=">">
+                          {t("components.dataSelectionPanel.opGreater")}
+                        </SelectItem>
+                        <SelectItem value="<">
+                          {t("components.dataSelectionPanel.opLess")}
+                        </SelectItem>
+                        <SelectItem value="LIKE">
+                          {t("components.dataSelectionPanel.opLike")}
+                        </SelectItem>
+                        <SelectItem value="BETWEEN">
+                          {t("components.dataSelectionPanel.opBetween")}
+                        </SelectItem>
+                        <SelectItem value="IN">
+                          {t("components.dataSelectionPanel.opIn")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="flex-1 min-w-[150px]">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">
                       {rule.operator === "BETWEEN"
-                        ? t("components.filterPanel.startValue")
-                        : t("components.filterPanel.value")}
+                        ? t("components.dataSelectionPanel.startValue")
+                        : t("components.dataSelectionPanel.value")}
                     </Label>
                     <Input
                       className="h-9 bg-background focus-visible:ring-warning"
@@ -503,7 +487,7 @@ export default function FilterPanel({
                       onChange={(e) =>
                         updateRule(rule.id, "value", e.target.value)
                       }
-                      placeholder={t("components.filterPanel.valuePlaceholder")}
+                      placeholder={t("components.dataSelectionPanel.valuePlaceholder")}
                       onKeyDown={(e) => e.key === "Enter" && handleApply()}
                     />
                   </div>
@@ -511,7 +495,7 @@ export default function FilterPanel({
                   {rule.operator === "BETWEEN" && (
                     <div className="flex-1 min-w-[150px]">
                       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">
-                        {t("components.filterPanel.endValue")}
+                        {t("components.dataSelectionPanel.endValue")}
                       </Label>
                       <Input
                         className="h-9 bg-background focus-visible:ring-warning"
@@ -520,7 +504,7 @@ export default function FilterPanel({
                           updateRule(rule.id, "value2", e.target.value)
                         }
                         placeholder={t(
-                          "components.filterPanel.endValuePlaceholder",
+                          "components.dataSelectionPanel.endValuePlaceholder",
                         )}
                         onKeyDown={(e) => e.key === "Enter" && handleApply()}
                       />
@@ -543,10 +527,10 @@ export default function FilterPanel({
           )}
 
           {joins.length > 0 && (
-            <div className="space-y-4 relative border-l-2 border-warning/30 pl-4 ml-2 my-2 mb-6">
+            <div className="space-y-4 relative border-l-2 border-info/30 pl-4 ml-2 my-2 mb-6">
               <h4 className="text-xs font-medium text-muted-foreground mb-4 flex items-center gap-2">
-                <Network className="w-3.5 h-3.5" />
-                {t("components.filterPanel.joinsTitle")}
+                <Network className="w-3.5 h-3.5 text-info" />
+                {t("components.dataSelectionPanel.joinsTitle")}
               </h4>
               {joins.map((join) => (
                 <div
@@ -555,7 +539,7 @@ export default function FilterPanel({
                 >
                   <div className="w-32 flex flex-col space-y-1">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground block">
-                      {t("components.filterPanel.joinType")}
+                      {t("components.dataSelectionPanel.joinType")}
                     </Label>
                     <Select
                       value={join.type || "INNER JOIN"}
@@ -575,7 +559,7 @@ export default function FilterPanel({
 
                   <div className="flex-[1.5] min-w-[200px] flex flex-col space-y-1">
                     <Label className="text-[10px] uppercase tracking-wider text-info/80 block">
-                      {t("components.filterPanel.targetTable")}
+                      {t("components.dataSelectionPanel.targetTable")}
                     </Label>
                     <Popover
                       open={openTargetTableComboboxes[join.id] || false}
@@ -583,28 +567,23 @@ export default function FilterPanel({
                         toggleTargetTableCombobox(join.id, open)
                       }
                     >
-                      <ActionTooltip
-                        label={t("components.filterPanel.searchTable")}
-                        side="top"
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={openTargetTableComboboxes[join.id]}
-                            className="h-8 w-full justify-between font-normal bg-background text-xs"
-                          >
-                            {join.targetTable ||
-                              t("components.filterPanel.selectTable")}
-                            <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                      </ActionTooltip>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openTargetTableComboboxes[join.id]}
+                          className="h-8 w-full justify-between font-normal bg-background text-xs"
+                        >
+                          {join.targetTable ||
+                            t("components.dataSelectionPanel.selectTable")}
+                          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
                       <PopoverContent className="w-[300px] p-0" align="start">
                         <Command>
                           <CommandInput
                             placeholder={t(
-                              "components.filterPanel.searchTable",
+                              "components.dataSelectionPanel.searchTable",
                             )}
                           />
                           <CommandList>
@@ -644,7 +623,7 @@ export default function FilterPanel({
 
                   <div className="flex-1 min-w-[150px] flex flex-col space-y-1">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground block">
-                      {t("components.filterPanel.localColumn")} ({tableName})
+                      {t("components.dataSelectionPanel.localColumn")} ({tableName})
                     </Label>
                     <Select
                       value={join.localColumn}
@@ -654,7 +633,7 @@ export default function FilterPanel({
                     >
                       <SelectTrigger className="h-8 bg-background text-xs">
                         <SelectValue
-                          placeholder={t("components.filterPanel.selectColumn")}
+                          placeholder={t("components.dataSelectionPanel.selectColumn")}
                         />
                       </SelectTrigger>
                       <SelectContent>
@@ -673,9 +652,9 @@ export default function FilterPanel({
 
                   <div className="flex-1 min-w-[150px] flex flex-col space-y-1">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground block">
-                      {t("components.filterPanel.targetColumn")} (
+                      {t("components.dataSelectionPanel.targetColumn")} (
                       {join.targetTable ||
-                        t("components.filterPanel.selectTable")}
+                        t("components.dataSelectionPanel.selectTable")}
                       )
                     </Label>
                     <Select
@@ -690,7 +669,7 @@ export default function FilterPanel({
                     >
                       <SelectTrigger className="h-8 bg-background text-xs">
                         <SelectValue
-                          placeholder={t("components.filterPanel.selectColumn")}
+                          placeholder={t("components.dataSelectionPanel.selectColumn")}
                         />
                       </SelectTrigger>
                       <SelectContent>
@@ -726,64 +705,43 @@ export default function FilterPanel({
 
       <div className="flex justify-between items-center pt-3 mt-1">
         <div className="flex gap-2">
-          <ActionTooltip
-            label={t("components.filterPanel.addRule")}
-            side="right"
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addRule}
+            className="text-warning hover:text-warning hover:bg-warning/10 border-warning/30"
           >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={addRule}
-              className="text-warning hover:text-warning hover:bg-warning/10 border-warning/30"
-            >
-              <Plus className="w-4 h-4 mr-1.5" />{" "}
-              {t("components.filterPanel.addRule")}
-            </Button>
-          </ActionTooltip>
-
-          <ActionTooltip
-            label={t("components.filterPanel.addJoin")}
-            side="right"
+            <Plus className="w-4 h-4 mr-1.5" />{" "}
+            {t("components.dataSelectionPanel.addRule")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addJoin}
+            className="text-info hover:text-info hover:bg-info/10 border-info/30"
           >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={addJoin}
-              className="text-info hover:text-info hover:bg-info/10 border-info/30"
-            >
-              <Plus className="w-4 h-4 mr-1.5" />{" "}
-              {t("components.filterPanel.addJoin")}
-            </Button>
-          </ActionTooltip>
+            <Plus className="w-4 h-4 mr-1.5" />{" "}
+            {t("components.dataSelectionPanel.addJoin")}
+          </Button>
         </div>
 
         <div className="flex gap-2">
-          {isApplied && (
-            <ActionTooltip
-              label={t("components.filterPanel.removeFilter")}
-              side="left"
+          {isApplied ? (
+            <Button
+              variant="outline"
+              onClick={handleDeactivate}
+              className="min-w-[120px] text-destructive hover:bg-destructive/10 border-destructive/30"
             >
-              <Button
-                variant="outline"
-                onClick={handleDeactivate}
-                className="min-w-[120px] text-destructive hover:bg-destructive/10 border-destructive/30 shadow-sm"
-              >
-                {t("components.filterPanel.removeFilter")}
-              </Button>
-            </ActionTooltip>
-          )}
-
-          <ActionTooltip
-            label={t("components.filterPanel.applyFilter")}
-            side="left"
-          >
+              {t("components.dataSelectionPanel.removeFilter")}
+            </Button>
+          ) : (
             <Button
               onClick={handleApply}
-              className="min-w-[120px] bg-warning hover:bg-warning/90 text-warning-foreground shadow-sm"
+              className="min-w-[120px] bg-warning hover:bg-warning/90 text-warning-foreground"
             >
-              {t("components.filterPanel.applyFilter")}
+              {t("components.dataSelectionPanel.applyFilter")}
             </Button>
-          </ActionTooltip>
+          )}
         </div>
       </div>
     </div>

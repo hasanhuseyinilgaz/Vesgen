@@ -57,7 +57,32 @@ export function useTableData({
     try {
       if (!isSilent || columns.length === 0) {
         const colResult = await fetchColumnsApi(itemName);
-        if (colResult?.success) setColumns(colResult.data);
+        if (colResult?.success) {
+          const useAlias = joins && joins.length > 0;
+          let mergedColumns = colResult.data.map((c: any) => ({
+            ...c,
+            tableName: itemName,
+            COLUMN_NAME: useAlias ? `${itemName}_${c.COLUMN_NAME}` : c.COLUMN_NAME,
+            originalName: c.COLUMN_NAME,
+          }));
+
+          // Fetch columns for joined tables
+          if (useAlias) {
+            for (const join of joins) {
+              const joinColRes = await fetchColumnsApi(join.targetTable);
+              if (joinColRes?.success) {
+                const joinCols = joinColRes.data.map((c: any) => ({
+                  ...c,
+                  tableName: join.targetTable,
+                  COLUMN_NAME: `${join.targetTable}_${c.COLUMN_NAME}`,
+                  originalName: c.COLUMN_NAME,
+                }));
+                mergedColumns = [...mergedColumns, ...joinCols];
+              }
+            }
+          }
+          setColumns(mergedColumns);
+        }
       }
 
       const dataResult = await fetchDataApi({

@@ -14,14 +14,12 @@ import { cn } from "@/lib/utils";
 import ActionTooltip from "@/components/ActionTooltip";
 
 interface LiveMonitoringPanelProps {
-  isVisible: boolean;
   onRefresh: () => void;
   onStatusChange: (isActive: boolean) => void;
   onAutoSort?: () => void;
 }
 
 export default function LiveMonitoringPanel({
-  isVisible,
   onRefresh,
   onStatusChange,
   onAutoSort,
@@ -83,9 +81,14 @@ export default function LiveMonitoringPanel({
   return (
     <div
       className={cn(
-        "mt-4 border-t pt-4 shadow-sm border rounded-xl p-5 transition-colors duration-500",
-        isLiveActive ? "border-info/30 bg-info/5" : "border-border bg-card",
+        "mt-4 border pt-4 rounded-xl p-5 transition-all duration-500 backdrop-blur-xl",
+        isLiveActive ? "border-info/30" : "border-border",
       )}
+      style={{ 
+        backgroundColor: isLiveActive 
+          ? `hsla(var(--info) / 0.05)` 
+          : `hsla(var(--card) / var(--glass-opacity))` 
+      }}
     >
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-start gap-3">
@@ -134,7 +137,7 @@ export default function LiveMonitoringPanel({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-background p-1.5 rounded-lg border shadow-sm">
+        <div className="flex items-center gap-4 bg-background p-1.5 rounded-lg border">
           <div className="flex items-center gap-2 pl-2">
             <Label className="text-xs text-muted-foreground font-medium">
               {t("components.livePanel.interval")}

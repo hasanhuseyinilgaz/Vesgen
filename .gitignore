@@ -35,3 +35,6 @@ Thumbs.db
 
 coverage/
 .nyc_output/
+
+# Vite dev server port (generated at runtime)
+electron/dev-port

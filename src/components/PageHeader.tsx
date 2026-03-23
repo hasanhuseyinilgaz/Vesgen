@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Filter, Activity, Download } from "lucide-react";
+import { RefreshCw, SlidersHorizontal, Activity, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -74,7 +74,7 @@ export default function PageHeader({
       className={cn(
         "flex flex-row items-center justify-between gap-3 relative z-20 w-full transition-all duration-300 shrink-0",
         variant === "card"
-          ? "p-2.5 sm:p-4 rounded-xl border shadow-sm glass-card overflow-hidden"
+          ? "p-2.5 sm:p-4 rounded-xl border glass-card overflow-hidden"
           : "bg-transparent p-0",
         className
       )}
@@ -183,7 +183,7 @@ export default function PageHeader({
               onClick={onToggleLivePanel}
               className={cn(
                 "h-9 w-9 p-0 transition-colors",
-                showLivePanel ? "bg-info hover:bg-info/90 text-info-foreground shadow-md shadow-info/20 border-info" : isLiveActive ? "border-info/50 text-info bg-info/10" : "bg-background"
+                showLivePanel ? "bg-info hover:bg-info/90 text-info-foreground border-info" : isLiveActive ? "border-info/50 text-info bg-info/10" : "bg-background"
               )}
             >
               <Activity className={cn("w-4 h-4", isLiveActive && !showLivePanel && "animate-pulse")} />
@@ -192,17 +192,17 @@ export default function PageHeader({
         )}
 
         {showFilterButton && onToggleFilter && (
-          <ActionTooltip label={t("components.dataToolbar.filtering")} side="bottom">
+          <ActionTooltip label={t("components.dataToolbar.dataSelection")} side="bottom">
             <Button
               variant={showFilter ? "default" : "outline"}
               size="sm"
               onClick={onToggleFilter}
               className={cn(
                 "h-9 w-9 p-0 transition-colors",
-                showFilter ? "bg-warning hover:bg-warning/90 text-warning-foreground shadow-md shadow-warning/20 border-warning" : isFilterActive ? "border-warning/50 text-warning bg-warning/10" : "bg-background"
+                showFilter ? "bg-warning hover:bg-warning/90 text-warning-foreground border-warning" : isFilterActive ? "border-warning/50 text-warning bg-warning/10" : "bg-background"
               )}
             >
-              <Filter className="w-4 h-4" />
+              <SlidersHorizontal className="w-4 h-4" />
             </Button>
           </ActionTooltip>
         )}
@@ -223,7 +223,7 @@ export default function PageHeader({
               onClick={onRefresh}
               disabled={loading}
               className={cn(
-                "h-9 shadow-sm flex justify-center items-center transition-all duration-300",
+                "h-9 flex justify-center items-center transition-all duration-300",
                 "w-9 2xl:w-auto 2xl:min-w-[120px] p-0 2xl:px-3 ml-1"
               )}
             >

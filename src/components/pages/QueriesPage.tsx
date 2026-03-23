@@ -25,7 +25,10 @@ import {
   CheckCircle2,
   TerminalSquare,
   X,
-  FileText
+  FileText,
+  ChevronUp,
+  ChevronDown,
+  FileSpreadsheet
 } from "lucide-react";
 
 import { exportToExcel } from "@/lib/exportUtils";
@@ -55,6 +58,15 @@ export interface Query {
   content: string;
 }
 
+interface QueryResult {
+  success: boolean;
+  data?: any[];
+  rowsAffected?: number | number[];
+  messages?: { message: string, line?: number }[];
+  rawError?: string;
+  errorLine?: number | null;
+}
+
 export default function QueriesPage() {
   const { t } = useTranslation();
 
@@ -75,11 +87,10 @@ export default function QueriesPage() {
   }>({ tables: [], views: [], procedures: [], columns: [] });
 
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<QueryResult | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
 
   const [showLivePanel, setShowLivePanel] = useState(false);
-  const [isLiveActive, setIsLiveActive] = useState(false);
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [newQueryName, setNewQueryName] = useState("");
@@ -92,6 +103,68 @@ export default function QueriesPage() {
     executeWithAuth,
     handlePasswordSuccess,
   } = useAuthGate();
+
+  // --- RESIZING STATE ---
+  const [splitHeight, setSplitHeight] = useState(60); // Percentage for Editor
+  const [isResizing, setIsResizing] = useState(false);
+  const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+  const [activeResultTab, setActiveResultTab] = useState<"results" | "messages">("results");
+  const [targetLine, setTargetLine] = useState<{ line: number; timestamp: number } | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const editorPaneRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    
+    // Commit the final dragged height to React state to persist it
+    if (editorPaneRef.current) {
+      const inlineHeight = editorPaneRef.current.style.height;
+      if (inlineHeight && inlineHeight.endsWith('%')) {
+        setSplitHeight(parseFloat(inlineHeight));
+      }
+    }
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (!isResizing || !splitContainerRef.current || !editorPaneRef.current) return;
+    
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    
+    rafRef.current = requestAnimationFrame(() => {
+      if (!splitContainerRef.current || !editorPaneRef.current) return;
+      const containerRect = splitContainerRef.current.getBoundingClientRect();
+      const relativeY = e.clientY - containerRect.top;
+      const newHeight = (relativeY / containerRect.height) * 100;
+      if (newHeight > 5 && newHeight < 95) {
+        // Direct DOM manipulation entirely bypasses costly React re-renders for buttery smooth dragging
+        editorPaneRef.current.style.height = `${newHeight}%`;
+      }
+    });
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", resize);
+      window.addEventListener("mouseup", stopResizing);
+    } else {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    }
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
 
   const activeTab = openTabs.find((t) => t.id === activeTabId) || null;
   const editorCode = activeTab?.content || "";
@@ -158,7 +231,6 @@ export default function QueriesPage() {
 
   useEffect(() => {
     setResult(null);
-    setIsLiveActive(false);
     setShowLivePanel(false);
   }, [activeTabId]);
 
@@ -325,15 +397,23 @@ export default function QueriesPage() {
     try {
       const execResult = await (window as any).electronAPI.dbExecuteQuery(currentTab.content);
       if (execResult?.success) {
-        setResult({ success: true, data: execResult.data, rowsAffected: execResult.rowsAffected });
+        setResult({ 
+          success: true, 
+          data: execResult.data, 
+          rowsAffected: execResult.rowsAffected,
+          messages: execResult.messages
+        });
+        if (execResult.messages && execResult.messages.length > 0 && (!execResult.data || execResult.data.length === 0)) {
+          setActiveResultTab("messages");
+        } else {
+          setActiveResultTab("results");
+        }
       } else {
         const rawMsg = execResult?.message || t("common.error");
-        setResult({ success: false, rawError: rawMsg, errorLine: extractLineNumber(rawMsg) });
-        setIsLiveActive(false);
+        setResult({ success: false, rawError: rawMsg, errorLine: execResult?.lineNumber || extractLineNumber(rawMsg) });
       }
     } catch (error: any) {
-      setResult({ success: false, rawError: error.message, errorLine: extractLineNumber(error.message) });
-      setIsLiveActive(false);
+      setResult({ success: false, rawError: error.message, errorLine: error.lineNumber || extractLineNumber(error.message) });
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -457,7 +537,9 @@ export default function QueriesPage() {
         />
       }
     >
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/5 custom-scrollbar flex flex-col gap-4 scroll-smooth">
+      <div className="flex-1 overflow-hidden p-4 md:p-6 bg-muted/5 flex flex-col gap-4">
+
+        <div className="shrink-0">
 
         <PageHeader
           title={t("queries.pageTitle", "Sorgu Konsolu")}
@@ -477,52 +559,68 @@ export default function QueriesPage() {
           showRefreshButton={false}
           showLiveButton={false}
           showRecordCount={false}
-          customActions={
-            <>
-              {activeTab && (
+          customActions={activeTab && (
+            <div className="flex items-center gap-2">
+              {activeTab.filename ? (
                 <>
-                  {activeTab.filename ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleUpdateInitiate}
-                        disabled={!isModified || loading}
-                        className={cn("h-9", isModified && "border-primary/50 text-primary hover:bg-primary/10")}
-                      >
-                        <Save className="w-4 h-4 mr-1.5" /> {t("queries.overwrite", "Kaydet")}
-                      </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUpdateInitiate}
+                    disabled={!isModified || loading}
+                    className={cn("h-9", isModified && "border-primary/50 text-primary hover:bg-primary/10")}
+                  >
+                    <Save className="w-4 h-4 mr-1.5" /> {t("queries.overwrite", "Kaydet")}
+                  </Button>
 
-                      <ActionTooltip label={t("queries.deleteQueryTitle", "Sil")} side="bottom">
-                        <Button variant="ghost" size="icon" onClick={handleDeleteInitiate} className="h-9 w-9 text-destructive hover:bg-destructive/10 hover:text-destructive">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </ActionTooltip>
-                    </>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={handleSaveInitiate} disabled={!editorCode.trim()} className="h-9">
-                      <Save className="w-4 h-4 mr-1.5" /> {t("queries.save", "Farklı Kaydet")}
-                    </Button>
-                  )}
-
-                  <div className="w-px h-6 bg-border mx-1" />
-
-                  <ActionTooltip label="Kısayol: F5" side="bottom">
-                    <Button onClick={handleExecuteInitiate} disabled={loading || !editorCode.trim()} className="h-9 px-6 shadow-sm">
-                      {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2 fill-current" />}
-                      {t("queries.run", "Çalıştır")}
+                  <ActionTooltip label={t("queries.deleteQueryTitle", "Sil")} side="bottom">
+                    <Button variant="ghost" size="icon" onClick={handleDeleteInitiate} className="h-9 w-9 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </ActionTooltip>
                 </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={handleSaveInitiate} disabled={!editorCode.trim()} className="h-9">
+                  <Save className="w-4 h-4 mr-1.5" /> {t("queries.save", "Farklı Kaydet")}
+                </Button>
               )}
-            </>
-          }
-        />
 
-        <div className="bg-card border rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0 min-h-[calc(100vh-250px)] relative">
+              <div className="w-px h-6 bg-border mx-1" />
+
+              <ActionTooltip label="Kısayol: F5" side="bottom">
+                <Button onClick={handleExecuteInitiate} disabled={loading || !editorCode.trim()} className="h-9 px-6">
+                  {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2 fill-current" />}
+                  {t("queries.run", "Çalıştır")}
+                </Button>
+              </ActionTooltip>
+            </div>
+          )}
+        />
+      </div>
+
+        <div
+          ref={splitContainerRef}
+          className="flex-1 flex flex-col overflow-hidden min-h-0 gap-1.5 select-none"
+        >
+          <div
+            ref={editorPaneRef}
+            className={cn(
+              "border rounded-xl flex flex-col overflow-hidden relative shrink-0 min-h-0",
+              !isResizing && "transition-all duration-300"
+            )}
+            style={{
+              height: !result
+                ? "100%"
+                : isResultsCollapsed
+                  ? "calc(100% - 60px)"
+                  : `${splitHeight}%`
+            }}
+          >
 
           {/* 🚀 ÇÖZÜM 2: Sabit (+) Butonu İçin Özel Flexbox Mimarisi */}
-          <div className="flex w-full items-end bg-muted/40 border-b shrink-0 z-30">
+          <div 
+            className="flex w-full items-end border-b shrink-0 z-30 glass-card backdrop-blur-xl rounded-none"
+          >
 
             {/* Sol Taraf - Kaydırılabilir Sekmeler */}
             <div className="flex-1 flex items-center overflow-x-auto overflow-y-hidden gap-1 custom-scrollbar pt-2 pl-2">
@@ -565,7 +663,7 @@ export default function QueriesPage() {
                   variant="ghost"
                   size="sm"
                   onClick={startNewQuery}
-                  className="h-7 w-7 p-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted shadow-sm border border-transparent hover:border-border/50"
+                  className="h-7 w-7 p-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent hover:border-border/50"
                 >
                   <Plus className="w-4 h-4" />
                 </Button>
@@ -574,18 +672,23 @@ export default function QueriesPage() {
 
           </div>
 
-          <div className="flex-1 relative flex flex-col bg-background">
+          <div className="flex-1 relative flex flex-col bg-background min-h-0">
             {!activeTabId ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground opacity-50 bg-card">
+              <div 
+                className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/50 glass-card backdrop-blur-lg z-20 rounded-none border-0"
+              >
                 <FileCode className="w-16 h-16 mb-4 opacity-30" />
-                <p>Yeni bir sorgu sekmesi açın veya sol menüden seçin.</p>
+                <p>{t("queries.noTabMessage", "Yeni bir sorgu sekmesi açın veya sol menüden seçin.")}</p>
                 <Button variant="outline" className="mt-4" onClick={startNewQuery}>
                   <Plus className="w-4 h-4 mr-2" /> {t("queries.newQuery")}
                 </Button>
               </div>
             ) : (
               <>
-                <div className="flex-1 w-full h-full relative">
+                <div 
+                  className="flex-1 w-full h-full relative min-h-0"
+                  style={{ pointerEvents: isResizing ? 'none' : 'auto' }}
+                >
                   <SqlCodeViewer
                     code={editorCode}
                     onChange={(val) => handleEditorChange(val || "")}
@@ -593,6 +696,7 @@ export default function QueriesPage() {
                     errorLine={result?.success === false ? result.errorLine : null}
                     errorMessage={result?.success === false ? result.rawError : null}
                     dbSchema={dbSchema}
+                    targetLine={targetLine}
                   />
                   {!editorCode.trim() && (
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center text-muted-foreground/30 font-mono text-lg select-none">
@@ -603,76 +707,220 @@ export default function QueriesPage() {
               </>
             )}
           </div>
+          </div>
+
+          {activeTabId && result && (
+            <>
+              {/* Divider / Resizer Handle */}
+              <div
+                className={cn(
+                  "h-1.5 shrink-0 rounded-full cursor-row-resize transition-all duration-200 flex items-center justify-center group",
+                  isResizing ? "bg-primary" : "bg-border/40 hover:bg-primary/40",
+                  isResultsCollapsed && "hidden"
+                )}
+                onMouseDown={startResizing}
+              >
+                <div className={cn(
+                  "w-12 h-1 rounded-full transition-colors",
+                  isResizing ? "bg-primary-foreground/30" : "bg-muted-foreground/20 group-hover:bg-primary/40"
+                )} />
+              </div>
+
+              <div
+                className={cn(
+                  "glass-card border rounded-xl flex flex-col overflow-hidden transition-all duration-300",
+                  isResultsCollapsed ? "flex-none h-[48px]" : "flex-1 min-h-0",
+                  !result.success && !isResultsCollapsed && "flex-initial h-fit max-h-[40%]"
+                )}
+              >
+                {result.success ? (
+                  <>
+                    <div className="shrink-0 px-4 py-2 border-b flex justify-between items-center bg-success/10 border-success/20 h-[52px]">
+                      <div className="flex items-center gap-3">
+                        <ActionTooltip label={isResultsCollapsed ? t("common.expand", "Genişlet") : t("common.collapse", "Daralt")} side="right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-success hover:bg-success/20 shrink-0"
+                            onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+                          >
+                            {isResultsCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </Button>
+                        </ActionTooltip>
+
+                        <div className="w-px h-4 bg-success/20 shrink-0" />
+
+                        <div className="flex items-center gap-2 mr-2">
+                          <CheckCircle2 className="w-4 h-4 text-success" />
+                          <span className="text-sm font-bold text-success whitespace-nowrap">{t("queries.querySuccess")}</span>
+                        </div>
+
+                        {!isResultsCollapsed && (
+                          <div className="flex items-center bg-background/40 p-0.5 rounded-lg border border-success/20 ml-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setActiveResultTab("results")}
+                              className={cn(
+                                "h-7 px-3 text-xs font-medium transition-all",
+                                activeResultTab === "results"
+                                  ? "bg-success text-success-foreground shadow-sm"
+                                  : "text-muted-foreground hover:text-success"
+                              )}
+                            >
+                              {t("queries.results", "Sonuçlar")}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setActiveResultTab("messages")}
+                              className={cn(
+                                "h-7 px-3 text-xs font-medium transition-all flex items-center gap-1.5",
+                                activeResultTab === "messages"
+                                  ? "bg-success text-success-foreground shadow-sm"
+                                  : "text-muted-foreground hover:text-success"
+                              )}
+                            >
+                              {t("queries.messages", "Mesajlar")}
+                              {result.messages && result.messages.length > 0 && (
+                                <span className={cn("flex h-1.5 w-1.5 rounded-full", activeResultTab === "messages" ? "bg-success-foreground/60" : "bg-muted-foreground/40")} />
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {result.rowsAffected && (
+                          <span className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded bg-background border border-success/20 text-success/70">
+                            {t("queries.rowsAffected", { count: Array.isArray(result.rowsAffected) ? result.rowsAffected[0] : result.rowsAffected })}
+                          </span>
+                        )}
+                        {result.data && result.data.length > 0 && activeResultTab === "results" && !isResultsCollapsed && (
+                          <Button variant="outline" size="sm" className="h-8 text-xs bg-background border-success/20 text-success hover:bg-success/5" onClick={handleExportExcel}>
+                            <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
+                            {t("queries.exportExcel")}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {!isResultsCollapsed && (
+                      <div className="flex-1 overflow-hidden relative bg-muted/5">
+                        {activeResultTab === "results" ? (
+                          result.data && result.data.length > 0 ? (
+                            <DataTable
+                              data={result.data || []}
+                              columns={Object.keys(result.data?.[0] || {}).map((k) => ({ name: k }))}
+                              title=""
+                              sortConfig={sortConfig}
+                              onSort={handleSort}
+                              className="border-0 rounded-none shadow-none h-full bg-transparent"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground py-16">
+                              <Database className="w-12 h-12 mb-3 opacity-20" />
+                              <p>{t("queries.noData")}</p>
+                            </div>
+                          )
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col bg-background p-6 overflow-y-auto custom-scrollbar font-mono text-sm leading-relaxed">
+                            {result.messages && result.messages.length > 0 ? (
+                              <div className="space-y-4">
+                                {result.messages.map((msg: any, i: number) => {
+                                  const isObj = typeof msg === 'object' && msg !== null;
+                                  const messageText = isObj ? msg.message : msg;
+                                  const messageLine = isObj ? msg.line : undefined;
+                                  
+                                  return (
+                                    <div 
+                                      key={i} 
+                                      className="group flex gap-3 items-start border-l-2 border-border/20 pl-4 py-1.5 hover:border-success/40 hover:bg-success/5 transition-all cursor-pointer rounded-r-lg"
+                                      onClick={() => messageLine && setTargetLine({ line: messageLine, timestamp: Date.now() })}
+                                    >
+                                      <div className="mt-2 shrink-0 h-1.5 w-1.5 rounded-full bg-muted-foreground/30 group-hover:bg-success/50 transition-colors" />
+                                      {messageLine && (
+                                        <span className="mt-0.5 shrink-0 text-[10px] text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded border border-border/50 group-hover:bg-success/10 group-hover:text-success group-hover:border-success/20 transition-colors">
+                                          Satır {messageLine}
+                                        </span>
+                                      )}
+                                      <span className="text-foreground/80 whitespace-pre-wrap flex-1 mt-0.5 leading-relaxed">{messageText}</span>
+                                    </div>
+                                  );
+                                })}
+                                <div className="pt-4 border-t border-border/10 text-[10px] text-muted-foreground uppercase tracking-widest pl-4">
+                                  {t("queries.executionFinished", "Sorgu yürütme tamamlandı.")}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-30">
+                                <TerminalSquare className="w-12 h-12 mb-3" />
+                                <p>{t("queries.noMessages", "Yazdırılacak mesaj yok.")}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full bg-background flex flex-col h-full overflow-hidden">
+                    <div className="px-4 py-2 border-b border-destructive/20 bg-destructive/5 flex items-center gap-3 shrink-0 h-[52px]">
+                      <ActionTooltip label={isResultsCollapsed ? t("common.expand", "Genişlet") : t("common.collapse", "Daralt")} side="right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
+                          onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+                        >
+                          {isResultsCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </Button>
+                      </ActionTooltip>
+
+                      <div className="w-px h-4 bg-destructive/20 shrink-0" />
+
+                      <div className="flex items-center gap-2 overflow-hidden flex-1">
+                        <Bug className="w-4 h-4 text-destructive shrink-0" />
+                        <span className="font-bold text-destructive truncate">{t("queries.sqlErrorOutput")}</span>
+                      </div>
+
+                      {result.errorLine && (
+                        <span className="text-[10px] font-mono bg-destructive/10 text-destructive px-2 py-0.5 rounded font-bold border border-destructive/20 shrink-0">
+                          {t("queries.line")} {result.errorLine}
+                        </span>
+                      )}
+                    </div>
+
+                    {!isResultsCollapsed && (
+                      <div 
+                        className="p-5 glass-card border-t-4 border-destructive flex-1 overflow-y-auto custom-scrollbar rounded-none bg-destructive/5 cursor-pointer hover:bg-destructive/10 transition-colors"
+                        onClick={() => result.errorLine && setTargetLine({ line: result.errorLine, timestamp: Date.now() })}
+                      >
+                        <div className="flex items-start gap-4">
+                          <TerminalSquare className="w-5 h-5 text-destructive opacity-50 shrink-0 mt-0.5" />
+                          <div className="flex flex-col gap-2">
+                            <p className="font-mono text-[13px] text-destructive leading-relaxed whitespace-pre-wrap selection:bg-destructive/30">
+                              {result.rawError}
+                            </p>
+                            {result.errorLine && (
+                              <span className="text-[10px] text-destructive font-mono bg-destructive/10 px-2 py-0.5 rounded w-fit border border-destructive/20 font-bold">
+                                Jump to Error (Line {result.errorLine})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {activeTabId && showLivePanel && (
-          <div className="shrink-0 border rounded-xl bg-card shadow-sm overflow-hidden mt-2">
-            <LiveMonitoringPanel isVisible={showLivePanel} onRefresh={handleLiveRefresh} onStatusChange={setIsLiveActive} />
-          </div>
-        )}
-
-        {activeTabId && result && (
-          <div className={cn("bg-card border rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0 transition-all mt-2 mb-10", result.success ? "min-h-[500px]" : "h-fit")}>
-            {result.success ? (
-              <>
-                <div className="shrink-0 px-5 py-3 border-b flex justify-between items-center bg-success/10 border-success/20">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-success" />
-                    <span className="text-sm font-bold text-success">{t("queries.querySuccess")}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {result.rowsAffected && (
-                      <span className="text-xs font-bold px-2.5 py-1 rounded bg-background border text-muted-foreground shadow-sm">
-                        {t("queries.rowsAffected", { count: result.rowsAffected[0] })}
-                      </span>
-                    )}
-                    {result.data?.length > 0 && (
-                      <Button variant="outline" size="sm" className="h-8 text-xs bg-background" onClick={handleExportExcel}>
-                        {t("queries.exportExcel")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-hidden relative bg-muted/5">
-                  {result.data?.length > 0 ? (
-                    <DataTable
-                      data={result.data}
-                      columns={Object.keys(result.data[0]).map((k) => ({ name: k }))}
-                      title=""
-                      sortConfig={sortConfig}
-                      onSort={handleSort}
-                      className="border-0 rounded-none shadow-none h-full bg-transparent"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground py-16">
-                      <Database className="w-12 h-12 mb-3 opacity-20" />
-                      <p>{t("queries.noData")}</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="w-full bg-background flex flex-col">
-                <div className="p-4 border-b border-destructive/20 bg-destructive/5 flex items-center gap-2 shrink-0">
-                  <Bug className="w-5 h-5 text-destructive" />
-                  <span className="font-semibold text-destructive">{t("queries.sqlErrorOutput")}</span>
-                  {result.errorLine && (
-                    <span className="ml-auto text-xs font-mono bg-destructive/10 text-destructive px-2 py-1 rounded font-bold border border-destructive/20">
-                      {t("queries.line")} {result.errorLine}
-                    </span>
-                  )}
-                </div>
-                <div className="p-5 bg-card border-t-4 border-destructive max-h-[300px] overflow-y-auto custom-scrollbar">
-                  <div className="flex items-start gap-3">
-                    <TerminalSquare className="w-5 h-5 text-destructive opacity-50 shrink-0 mt-0.5" />
-                    <p className="font-mono text-[13px] text-destructive leading-relaxed whitespace-pre-wrap selection:bg-destructive/30">
-                      {result.rawError}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="shrink-0 border rounded-xl glass-card overflow-hidden">
+            <LiveMonitoringPanel onRefresh={handleLiveRefresh} onStatusChange={() => { }} />
           </div>
         )}
       </div>

@@ -76,6 +76,10 @@
     "noData": "No table data returned (Empty result).",
     "sqlErrorOutput": "SQL Error Output",
     "line": "Line:",
+    "results": "Results",
+    "messages": "Messages",
+    "noMessages": "No messages to display.",
+    "executionFinished": "Query execution finished.",
     "saveQueryTitle": "Save Query",
     "saveQueryDesc": "Name your code to reuse it later.",
     "queryNameLabel": "Query Name",
@@ -370,13 +374,13 @@
       "records": "Records",
       "firstN": "Top {{count}}",
       "liveMonitorMode": "Live Monitoring Mode",
-      "filtering": "Filtering",
+      "dataSelection": "Data Selection",
       "downloadExcel": "Download as Excel/XLSX",
       "loading": "Loading",
       "refresh": "Refresh"
     },
-    "filterPanel": {
-      "title": "Advanced Filtering (AND/OR)",
+    "dataSelectionPanel": {
+      "title": "Detailed Data Selection",
       "reset": "Reset",
       "column": "Column",
       "searchColumn": "Search and select column...",

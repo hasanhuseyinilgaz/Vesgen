@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { exportToExcel } from "@/lib/exportUtils";
 import { useTableData } from "@/hooks/useTableData";
-import FilterPanel from "@/components/FilterPanel";
+import DataSelectionPanel from "@/components/DataSelectionPanel";
 import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
 import DataTable from "@/components/DataTable";
 import EmptyState from "@/components/EmptyState";
@@ -26,6 +26,7 @@ import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import CustomTabs from "@/components/CustomTabs";
 import SchemaDiagram from "@/components/SchemaDiagram";
+import { useSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -77,9 +78,12 @@ export default function TablesPage() {
     fetchColumnsApi: (window as any).electronAPI?.dbGetTableColumns,
   });
 
+  const { config, loadConfig } = useSettings();
+
   useEffect(() => {
     loadTables();
-  }, []);
+    loadConfig();
+  }, [loadConfig]);
 
   useEffect(() => {
     if (selectedTable && activeTab === "schema")
@@ -106,59 +110,126 @@ export default function TablesPage() {
   const loadSchemaDiagram = async (tableName: string) => {
     setLoading(true);
     try {
-      const relResult = await (window as any).electronAPI.dbGetTableRelations(
-        tableName,
-      );
+      const relResult = await (window as any).electronAPI.dbGetTableRelations(tableName);
       if (!relResult?.success) return;
 
       const relations = relResult.data;
       const newNodes: Node[] = [];
       const newEdges: Edge[] = [];
 
-      newNodes.push({
-        id: tableName,
-        type: "tableNode",
-        position: { x: 0, y: 0 },
-        data: { label: tableName, columns: columns },
-      });
-
-      relations.forEach((rel: any) => {
-        newEdges.push({
-          id: `e-${rel.ForeignKeyName}`,
-          source: rel.SourceTable,
-          target: rel.TargetTable,
-          sourceHandle: rel.SourceColumn,
-          targetHandle: rel.TargetColumn,
-          label: rel.ForeignKeyName,
-          animated: true,
-        });
-      });
-
+      // Komşu tabloların sütunlarını topla
       const neighbors = relations.map((r: any) =>
         r.SourceTable === tableName ? r.TargetTable : r.SourceTable,
       );
       const uniqueNeighbors = Array.from(new Set(neighbors)).filter(
         (n) => n !== tableName,
+      ) as string[];
+
+      // Komşu sütunları fetch et
+      const neighborColumns: Record<string, any[]> = {};
+      await Promise.all(
+        uniqueNeighbors.map(async (nName) => {
+          const colRes = await (window as any).electronAPI.dbGetTableColumns(nName);
+          neighborColumns[nName] = colRes?.success ? colRes.data : [];
+        }),
       );
 
-      const radius = 700;
-      for (let i = 0; i < uniqueNeighbors.length; i++) {
-        const nName = uniqueNeighbors[i] as string;
-        const colRes = await (window as any).electronAPI.dbGetTableColumns(
-          nName,
-        );
+      // --- NODE YERLEŞİM ALGORİTMASI ---
+      // Ana tablo: ortada (x=0, y=0)
+      // Kaynak tablolar (SourceTable=tableName → targetTable): sağ sütun
+      // Referans tablolar (ana tablo referenced): sol sütun
+      const NODE_WIDTH = 320;
+      const NODE_V_GAP = 80; // node'lar arası dikey boşluk (px)
 
-        const angle = (i / uniqueNeighbors.length) * 2 * Math.PI;
+      // Sütunları tahmin ederek node yüksekliğini hesapla
+      const estimateHeight = (colCount: number) => 48 + colCount * 40 + 16;
+
+      const mainColCount = columns?.length ?? 8;
+      const mainHeight = estimateHeight(mainColCount);
+
+      // Ana tablo merkeze
+      newNodes.push({
+        id: tableName,
+        type: "tableNode",
+        position: { x: 0, y: -(mainHeight / 2) },
+        data: { label: tableName, columns: columns },
+      });
+
+      // Komşuları iki gruba ayır: ana tablodan çıkanlar (sağ) ve ana tabloya girenler (sol)
+      const rightNeighbors: string[] = [];
+      const leftNeighbors: string[] = [];
+      const seen = new Set<string>();
+
+      relations.forEach((rel: any) => {
+        const other = rel.SourceTable === tableName ? rel.TargetTable : rel.SourceTable;
+        if (seen.has(other) || other === tableName) return;
+        seen.add(other);
+        if (rel.SourceTable === tableName) {
+          rightNeighbors.push(other);
+        } else {
+          leftNeighbors.push(other);
+        }
+      });
+
+      // Sağ sütun (ana tablodan çıkan FK'lar - target)
+      const H_GAP = 160; // node'lar arası yatay boşluk
+      let rightY = 0;
+      const rightTotalH = rightNeighbors.reduce(
+        (acc, n) => acc + estimateHeight(neighborColumns[n]?.length ?? 5) + NODE_V_GAP,
+        0,
+      );
+      rightY = -(rightTotalH / 2);
+
+      rightNeighbors.forEach((nName) => {
+        const h = estimateHeight(neighborColumns[nName]?.length ?? 5);
         newNodes.push({
           id: nName,
           type: "tableNode",
-          position: {
-            x: Math.cos(angle) * radius,
-            y: Math.sin(angle) * radius,
-          },
-          data: { label: nName, columns: colRes?.success ? colRes.data : [] },
+          position: { x: NODE_WIDTH + H_GAP, y: rightY },
+          data: { label: nName, columns: neighborColumns[nName] },
         });
-      }
+        rightY += h + NODE_V_GAP;
+      });
+
+      // Sol sütun (ana tabloya giren FK'lar - source)
+      let leftY = 0;
+      const leftTotalH = leftNeighbors.reduce(
+        (acc, n) => acc + estimateHeight(neighborColumns[n]?.length ?? 5) + NODE_V_GAP,
+        0,
+      );
+      leftY = -(leftTotalH / 2);
+
+      leftNeighbors.forEach((nName) => {
+        const h = estimateHeight(neighborColumns[nName]?.length ?? 5);
+        newNodes.push({
+          id: nName,
+          type: "tableNode",
+          position: { x: -(NODE_WIDTH + H_GAP), y: leftY },
+          data: { label: nName, columns: neighborColumns[nName] },
+        });
+        leftY += h + NODE_V_GAP;
+      });
+
+      // --- EDGE'LER ---
+      // sourceHandle / targetHandle kaldırıldı → oklar node kenarından çıkar (karışıklık yok)
+      const edgeIds = new Set<string>();
+      relations.forEach((rel: any) => {
+        const edgeId = `e-${rel.SourceTable}-${rel.TargetTable}-${rel.SourceColumn}-${rel.TargetColumn}`;
+        if (edgeIds.has(edgeId)) return;
+        edgeIds.add(edgeId);
+
+        newEdges.push({
+          id: edgeId,
+          source: rel.SourceTable,
+          target: rel.TargetTable,
+          sourceHandle: `${rel.SourceTable}-${rel.SourceColumn}`,
+          targetHandle: `${rel.TargetTable}-${rel.TargetColumn}`,
+          type: "default", // Bezier curves avoid overlapping straight segments
+          animated: false,
+          label: `${rel.SourceColumn} → ${rel.TargetColumn}`,
+          markerEnd: { type: "arrowclosed" as any, color: "hsl(var(--primary))", width: 20, height: 20 },
+        });
+      });
 
       setNodes(newNodes);
       setEdges(newEdges);
@@ -166,6 +237,7 @@ export default function TablesPage() {
       setLoading(false);
     }
   };
+
 
   const handleTableSelect = (tableName: string) => {
     resetState();
@@ -213,7 +285,7 @@ export default function TablesPage() {
         />
       }
     >
-      <div className="flex flex-col h-full bg-background overflow-hidden">
+      <div className="flex flex-col h-full bg-transparent overflow-hidden">
         <div
           className={cn(
             "flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full",
@@ -245,7 +317,7 @@ export default function TablesPage() {
               setShowLivePanel(false);
               setShowFilter(!showFilter);
             }}
-            isFilterActive={activeWhereClause.trim().length > 0}
+            isFilterActive={activeWhereClause.trim().length > 0 || activeJoins.length > 0}
             showFilterButton={!!selectedTable && activeTab === "data"}
             showLiveButton={!!selectedTable && activeTab === "data"}
             showRefreshButton={!!selectedTable}
@@ -269,7 +341,7 @@ export default function TablesPage() {
           {selectedTable ? (
             <>
               <div className={cn("mt-0", !showFilter && "hidden")}>
-                <FilterPanel
+                <DataSelectionPanel
                   tableName={selectedTable}
                   columns={columns}
                   allTables={tables}
@@ -284,7 +356,6 @@ export default function TablesPage() {
               </div>
               <div className={cn("mt-0", !showLivePanel && "hidden")}>
                 <LiveMonitoringPanel
-                  isVisible={showLivePanel}
                   onRefresh={() =>
                     loadTableData(
                       selectedTable,
@@ -330,22 +401,23 @@ export default function TablesPage() {
                 )}
               >
                 {activeTab === "data" ? (
-                  <DataTable
-                    data={tableData}
-                    columns={columns.map((c: any) => ({
-                      name: c.COLUMN_NAME,
-                      type: c.DATA_TYPE,
-                      isIdentity: c.IS_IDENTITY === 1,
-                    }))}
-                    title={selectedTable}
-                    sortConfig={sortConfig}
-                    enableUpdate={activeJoins.length === 0}
-                    onSort={handleSort}
-                    onUpdateRecord={handleUpdateRecord}
-                  />
+                    <DataTable
+                      data={tableData}
+                      columns={columns.map((c: any) => ({
+                        name: c.COLUMN_NAME,
+                        type: c.DATA_TYPE,
+                        isIdentity: c.IS_IDENTITY === 1,
+                      }))}
+                      title={selectedTable}
+                      sortConfig={sortConfig}
+                      enableUpdate={activeJoins.length === 0}
+                      onSort={handleSort}
+                      onUpdateRecord={handleUpdateRecord}
+                      defaultPageSize={config?.ui?.table?.defaultPageSize}
+                    />
                 ) : (
                   <div className="h-full flex flex-col">
-                    <div className="flex-1 relative border rounded-xl overflow-hidden shadow-inner bg-muted/5">
+                    <div className="flex-1 relative border rounded-xl overflow-hidden bg-muted/5">
                       <SchemaDiagram
                         nodes={nodes}
                         edges={edges}

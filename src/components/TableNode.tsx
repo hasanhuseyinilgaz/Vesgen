@@ -53,7 +53,7 @@ export default function TableNode({ data }: TableNodeProps) {
               <Handle
                 type="target"
                 position={Position.Left}
-                id={col.COLUMN_NAME}
+                id={`${data.label}-${col.COLUMN_NAME}`}
                 className="!w-2.5 !h-2.5 !bg-muted-foreground !border-2 !border-background -ml-1 transition-all group-hover:!bg-primary group-hover:!scale-125"
               />
 
@@ -82,7 +82,7 @@ export default function TableNode({ data }: TableNodeProps) {
               <Handle
                 type="source"
                 position={Position.Right}
-                id={col.COLUMN_NAME}
+                id={`${data.label}-${col.COLUMN_NAME}`}
                 className="!w-2.5 !h-2.5 !bg-muted-foreground !border-2 !border-background -mr-1 transition-all group-hover:!bg-primary group-hover:!scale-125"
               />
             </div>

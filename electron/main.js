@@ -78,6 +78,20 @@ async function ensureFileSystem() {
   }
 }
 
+function getDevPort() {
+  const portFile = path.join(__dirname, "dev-port");
+  try {
+    const fsSync = require("fs");
+    if (fsSync.existsSync(portFile)) {
+      const port = parseInt(fsSync.readFileSync(portFile, "utf-8").trim(), 10);
+      if (!isNaN(port) && port > 0) return port;
+    }
+  } catch (e) {
+    console.warn("dev-port dosyası okunamadı, varsayılan 5173 kullanılacak:", e.message);
+  }
+  return 5173;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -101,7 +115,8 @@ function createWindow() {
   const isDev = !app.isPackaged;
 
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    const devPort = getDevPort();
+    mainWindow.loadURL(`http://localhost:${devPort}`);
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, "../dist/react/index.html"));
@@ -262,45 +277,58 @@ ipcMain.handle(
       if (!pool) throw new Error("Veritabanı bağlantısı yok");
 
       const colResult = await pool.request().query(`
-      SELECT COLUMN_NAME, DATA_TYPE 
-      FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_NAME = '${tableName}'
-    `);
+        SELECT COLUMN_NAME, DATA_TYPE 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_NAME = '${tableName}'
+      `);
 
-      const columns = colResult.recordset;
-
-      const selectColumns = columns
-        .map((col) => {
+      // Helper function to get columns with or without aliases
+      const getColumnsWithAlias = (targetTable, colList, useAlias) => {
+        return colList.map((col) => {
           const type = col.DATA_TYPE.toLowerCase();
+          const alias = useAlias ? `${targetTable}_${col.COLUMN_NAME}` : col.COLUMN_NAME;
+          const source = `[${targetTable}].[${col.COLUMN_NAME}]`;
+          
           if (
             type === "varbinary" ||
             type === "image" ||
             type === "geometry" ||
             type === "geography"
           ) {
-            return `CAST('<Binary/Spatial Data>' AS VARCHAR(50)) AS [${col.COLUMN_NAME}]`;
+            return `CAST('<Binary/Spatial Data>' AS VARCHAR(50)) AS [${alias}]`;
           }
           if (type === "xml" || type === "text" || type === "ntext") {
-            return `CAST(LEFT([${tableName}].[${col.COLUMN_NAME}], 500) + '...' AS VARCHAR(503)) AS [${col.COLUMN_NAME}]`;
+            return `CAST(LEFT(${source}, 500) + '...' AS VARCHAR(503)) AS [${alias}]`;
           }
-          return `[${tableName}].[${col.COLUMN_NAME}]`;
-        })
-        .join(", ");
+          return `${source} AS [${alias}]`;
+        });
+      };
 
-      const finalSelect = selectColumns.length > 0 ? selectColumns : "*";
+      const useAlias = joins && joins.length > 0;
+      let allSelectColumns = getColumnsWithAlias(tableName, colResult.recordset, useAlias);
+
+      let joinSql = "";
+      if (useAlias) {
+        for (const j of joins) {
+          const type = j.type || "INNER JOIN";
+          joinSql += ` ${type} [${j.targetTable}] ON [${tableName}].[${j.localColumn}] = [${j.targetTable}].[${j.targetColumn}]`;
+          
+          // Fetch columns for the joined table
+          const joinColResult = await pool.request().query(`
+            SELECT COLUMN_NAME, DATA_TYPE 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = '${j.targetTable}'
+          `);
+          
+          const joinSelects = getColumnsWithAlias(j.targetTable, joinColResult.recordset, true);
+          allSelectColumns = allSelectColumns.concat(joinSelects);
+        }
+      }
+
+      const finalSelect = allSelectColumns.length > 0 ? allSelectColumns.join(", ") : "*";
       const topClause = top ? `TOP ${top}` : "TOP 100";
       const where = whereClause ? `WHERE ${whereClause}` : "";
       const order = orderBy ? `ORDER BY ${orderBy}` : "";
-
-      let joinSql = "";
-      if (joins && joins.length > 0) {
-        joinSql = joins
-          .map((j) => {
-            const type = j.type || "INNER JOIN";
-            return `${type} [${j.targetTable}] ON [${tableName}].[${j.localColumn}] = [${j.targetTable}].[${j.targetColumn}]`;
-          })
-          .join(" ");
-      }
 
       const query = `SELECT ${topClause} ${finalSelect} FROM [${tableName}] ${joinSql} ${where} ${order}`;
       const result = await pool.request().query(query);
@@ -473,15 +501,33 @@ ipcMain.handle("db:executeSP", async (event, { spName, parameters }) => {
 ipcMain.handle("db:executeQuery", async (event, query) => {
   try {
     if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(query);
+    
+    const request = pool.request();
+    let messages = [];
+    
+    // Capture PRINT and low-severity RAISERROR messages
+    request.on('info', (info) => {
+      messages.push({
+        message: info.message,
+        line: info.lineNumber
+      });
+    });
+
+    const result = await request.query(query);
     const serialized = serializeData(result.recordset);
+    
     return {
       success: true,
       data: serialized,
       rowsAffected: result.rowsAffected,
+      messages: messages
     };
   } catch (error) {
-    return { success: false, message: error.message };
+    return { 
+      success: false, 
+      message: error.message,
+      lineNumber: error.lineNumber
+    };
   }
 });
 

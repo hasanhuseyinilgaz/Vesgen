@@ -9,6 +9,7 @@ import { useSystemMonitor } from "@/hooks/useSystemMonitor";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
+import PageLayout from "@/components/PageLayout";
 
 export default function ActivityMonitorPage() {
   const { t } = useTranslation();
@@ -31,7 +32,7 @@ export default function ActivityMonitorPage() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden w-full">
+    <PageLayout>
       <div className="flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
         <div className="flex flex-col gap-0 shrink-0">
           <PageHeader
@@ -62,7 +63,6 @@ export default function ActivityMonitorPage() {
             )}
           >
             <LiveMonitoringPanel
-              isVisible={showLivePanel}
               onRefresh={handleLiveRefresh}
               onStatusChange={setIsLiveActive}
             />
@@ -70,7 +70,10 @@ export default function ActivityMonitorPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
-          <div className="p-4 rounded-xl border bg-card flex items-center gap-4 shadow-sm">
+          <div 
+            className="p-4 rounded-xl border glass-card flex items-center gap-4 shadow-sm"
+            style={{ backgroundColor: `hsla(var(--card) / var(--glass-opacity))` }}
+          >
             <div className="p-3 bg-info/10 rounded-lg transition-transform hover:scale-105">
               <Zap className="w-5 h-5 text-info" />
             </div>
@@ -82,7 +85,10 @@ export default function ActivityMonitorPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-xl border bg-card flex items-center gap-4 shadow-sm">
+          <div 
+            className="p-4 rounded-xl border glass-card flex items-center gap-4 shadow-sm"
+            style={{ backgroundColor: `hsla(var(--card) / var(--glass-opacity))` }}
+          >
             <div
               className={cn(
                 "p-3 rounded-lg transition-transform hover:scale-105",
@@ -116,7 +122,10 @@ export default function ActivityMonitorPage() {
           </div>
 
           {healthData.disks.length > 0 && (
-            <div className="p-4 rounded-xl border bg-card flex items-center gap-4 shadow-sm">
+            <div 
+              className="p-4 rounded-xl border glass-card flex items-center gap-4 shadow-sm"
+              style={{ backgroundColor: `hsla(var(--card) / var(--glass-opacity))` }}
+            >
               <div
                 className={cn(
                   "p-3 rounded-lg transition-transform hover:scale-105",
@@ -165,6 +174,6 @@ export default function ActivityMonitorPage() {
           />
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }
