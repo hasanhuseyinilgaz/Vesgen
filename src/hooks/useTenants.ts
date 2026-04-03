@@ -21,8 +21,8 @@ export function useTenants() {
   const loadTenants = useCallback(async () => {
     setIsLoading(true);
     try {
-      if ((window as any).electronAPI?.fsReadTenants) {
-        const result = await (window as any).electronAPI.fsReadTenants();
+      if (window.electronAPI) {
+        const result = await window.electronAPI.fsReadTenants();
         if (result?.success) {
           setTenants(result.data || []);
         }
@@ -66,8 +66,8 @@ export function useTenants() {
     };
 
     try {
-      if ((window as any).electronAPI?.fsSaveTenant) {
-        const result = await (window as any).electronAPI.fsSaveTenant(
+      if (window.electronAPI) {
+        const result = await window.electronAPI.fsSaveTenant(
           newTenant,
         );
         if (result.success) {
@@ -98,8 +98,8 @@ export function useTenants() {
     };
 
     try {
-      if ((window as any).electronAPI?.fsSaveTenant) {
-        const result = await (window as any).electronAPI.fsSaveTenant(
+      if (window.electronAPI) {
+        const result = await window.electronAPI.fsSaveTenant(
           updatedTenant,
         );
         if (result.success) {
@@ -120,8 +120,8 @@ export function useTenants() {
     setIsDeleting(true);
 
     try {
-      if ((window as any).electronAPI?.fsDeleteTenant) {
-        const result = await (window as any).electronAPI.fsDeleteTenant(id);
+      if (window.electronAPI) {
+        const result = await window.electronAPI.fsDeleteTenant(id);
         if (result.success) {
           await loadTenants();
           return true;

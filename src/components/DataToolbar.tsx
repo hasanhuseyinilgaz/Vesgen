@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 interface DataToolbarProps {
   title: string;

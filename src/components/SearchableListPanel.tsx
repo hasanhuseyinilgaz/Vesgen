@@ -6,17 +6,17 @@ import { Search, RefreshCw } from "lucide-react";
 import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
-export interface SidebarItem {
+export interface SearchableListItem {
   id: string;
   label: string;
 }
 
-interface SearchableSidebarProps {
+interface SearchableListPanelProps {
   title: string;
   icon: LucideIcon;
-  items: SidebarItem[];
+  items: SearchableListItem[];
   selectedItemId: string | null;
   onSelect: (id: string) => void;
   onRefresh: () => void;
@@ -24,7 +24,7 @@ interface SearchableSidebarProps {
   searchPlaceholder?: string;
 }
 
-export default function SearchableSidebar({
+export default function SearchableListPanel({
   title,
   icon: Icon,
   items,
@@ -33,7 +33,7 @@ export default function SearchableSidebar({
   onRefresh,
   loading,
   searchPlaceholder,
-}: SearchableSidebarProps) {
+}: SearchableListPanelProps) {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
 

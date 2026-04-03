@@ -14,7 +14,7 @@ import {
 } from "@xyflow/react";
 import { Maximize2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
-import TableNode from "@/components/TableNode";
+import TableNode from "@/components/schema/TableNode";
 
 const nodeTypes = {
   tableNode: TableNode,

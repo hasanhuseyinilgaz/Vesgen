@@ -14,7 +14,7 @@ export function useAuthGate() {
     modalInfo: { title: string; description: string },
   ) => {
     try {
-      const res = await (window as any).electronAPI.configGet();
+      const res = await window.electronAPI.configGet();
       const requiresAuth = res?.data?.security?.requirePasswordFor?.[configKey];
 
       if (requiresAuth) {

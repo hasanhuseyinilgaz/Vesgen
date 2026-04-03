@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const sql = require("mssql");
 const Store = require("electron-store");
 const fs = require("fs").promises;
 const security = require("./security");
+const { Client } = require("ssh2");
 
 const store = new Store();
 let mainWindow;
@@ -57,7 +58,8 @@ async function ensureFileSystem() {
   const dirsToCreate = [
     path.join(basePath, "configs"),
     path.join(basePath, "configs/tenants"),
-    path.join(basePath, "queries")
+    path.join(basePath, "queries"),
+    path.join(basePath, "monitoring")
   ];
 
   for (const dir of dirsToCreate) {
@@ -124,6 +126,14 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+  });
+
+  mainWindow.on("focus", () => {
+    MonitoringService.updateGlobalFocus(true);
+  });
+
+  mainWindow.on("blur", () => {
+    MonitoringService.updateGlobalFocus(false);
   });
 }
 
@@ -288,7 +298,7 @@ ipcMain.handle(
           const type = col.DATA_TYPE.toLowerCase();
           const alias = useAlias ? `${targetTable}_${col.COLUMN_NAME}` : col.COLUMN_NAME;
           const source = `[${targetTable}].[${col.COLUMN_NAME}]`;
-          
+
           if (
             type === "varbinary" ||
             type === "image" ||
@@ -312,14 +322,14 @@ ipcMain.handle(
         for (const j of joins) {
           const type = j.type || "INNER JOIN";
           joinSql += ` ${type} [${j.targetTable}] ON [${tableName}].[${j.localColumn}] = [${j.targetTable}].[${j.targetColumn}]`;
-          
+
           // Fetch columns for the joined table
           const joinColResult = await pool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE 
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = '${j.targetTable}'
           `);
-          
+
           const joinSelects = getColumnsWithAlias(j.targetTable, joinColResult.recordset, true);
           allSelectColumns = allSelectColumns.concat(joinSelects);
         }
@@ -501,10 +511,10 @@ ipcMain.handle("db:executeSP", async (event, { spName, parameters }) => {
 ipcMain.handle("db:executeQuery", async (event, query) => {
   try {
     if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    
+
     const request = pool.request();
     let messages = [];
-    
+
     // Capture PRINT and low-severity RAISERROR messages
     request.on('info', (info) => {
       messages.push({
@@ -515,7 +525,7 @@ ipcMain.handle("db:executeQuery", async (event, query) => {
 
     const result = await request.query(query);
     const serialized = serializeData(result.recordset);
-    
+
     return {
       success: true,
       data: serialized,
@@ -523,8 +533,8 @@ ipcMain.handle("db:executeQuery", async (event, query) => {
       messages: messages
     };
   } catch (error) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       message: error.message,
       lineNumber: error.lineNumber
     };
@@ -1220,5 +1230,826 @@ ipcMain.handle(
       console.error("Job Kaydetme Hatası:", error);
       return { success: false, message: error.message };
     }
-  },
+  }
+
 );
+
+ipcMain.handle("win:testConnection", async (event, config) => {
+  return new Promise((resolve) => {
+    const conn = new Client();
+
+    conn.on("ready", () => {
+      conn.exec('powershell.exe -NoProfile -Command "Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version | ConvertTo-Json"', (err, stream) => {
+        if (err) {
+          conn.end();
+          return resolve({ success: false, message: "Komut reddedildi: " + err.message });
+        }
+
+        let data = "";
+        let errorData = "";
+
+        stream.on("close", (code) => {
+          conn.end();
+          if (code !== 0) {
+            return resolve({ success: false, message: `SSH Hata ${code}: ${errorData || data}` });
+          }
+          try {
+            const result = JSON.parse(data.trim());
+            resolve({ success: true, data: result });
+          } catch (e) {
+            resolve({ success: true, data: { Caption: data.trim(), Version: "JSON Ayrıştırma Hatası" } });
+          }
+        }).on("data", (d) => {
+          data += d.toString();
+        }).stderr.on("data", (d) => {
+          errorData += d.toString();
+        });
+      });
+    }).on("error", (err) => {
+      resolve({ success: false, message: "SSH Bağlantı Hatası: " + err.message });
+    }).connect({
+      host: config.host,
+      port: 22,
+      username: config.username || config.user,
+      password: config.password,
+      readyTimeout: 15000
+    });
+  });
+});
+
+ipcMain.handle("win:getPerformanceStats", async (event, config) => {
+  return new Promise((resolve) => {
+    const conn = new Client();
+    let isResolved = false;
+
+    const timeout = setTimeout(() => {
+      if (!isResolved) {
+        isResolved = true;
+        conn.end();
+        resolve({ success: false, message: "Bağlantı zaman aşımına uğradı (SSH timeout)" });
+      }
+    }, 25000);
+
+    const command = `powershell.exe -NoProfile -Command "$cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \\"Name='_Total'\\" -Property PercentProcessorTime).PercentProcessorTime; $mem = Get-CimInstance Win32_OperatingSystem -Property TotalVisibleMemorySize, FreePhysicalMemory; $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3 OR DriveType=2' -Property DeviceID, Size, FreeSpace, VolumeName; $diskIO = (Get-CimInstance Win32_PerfFormattedData_PerfDisk_LogicalDisk -Filter \\"Name='_Total'\\" -Property DiskBytesPersec).DiskBytesPersec; $netIO = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface -Property BytesTotalPersec | Measure-Object -Property BytesTotalPersec -Sum).Sum; if ($null -eq $netIO) { $netIO = 0 }; $info = @{ CPU = [Math]::Round([double]$cpu, 1); RAM = @{ Total = [Math]::Round($mem.TotalVisibleMemorySize / 1MB, 2); Used = [Math]::Round(($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / 1MB, 2); Percent = [Math]::Round((([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / ([double]$mem.TotalVisibleMemorySize + 1)) * 100, 1) }; Disks = @($disks | ForEach-Object { @{ ID = $_.DeviceID; Name = $_.VolumeName; Total = [Math]::Round([double]$_.Size / 1GB, 2); Free = [Math]::Round([double]$_.FreeSpace / 1GB, 2); Percent = [Math]::Round((([double]$_.Size - [double]$_.FreeSpace) / ([double]$_.Size + 0.1)) * 100, 1) }; }); IO = @{ DiskRW = [Math]::Round([double]$diskIO / 1MB, 2); Network = [Math]::Round([double]$netIO / 1KB, 2) }; Timestamp = Get-Date -Format 'HH:mm:ss' }; $info | ConvertTo-Json -Depth 5"`;
+
+    conn.on("ready", () => {
+      conn.exec(command, (err, stream) => {
+        if (err) {
+          if (!isResolved) {
+            isResolved = true;
+            clearTimeout(timeout);
+            conn.end();
+            resolve({ success: false, message: err.message });
+          }
+          return;
+        }
+        let data = "";
+        stream.on("close", () => {
+          if (!isResolved) {
+            isResolved = true;
+            clearTimeout(timeout);
+            conn.end();
+            try { resolve({ success: true, data: JSON.parse(data.trim()) }); }
+            catch (e) { resolve({ success: false, message: "Veri okuma hatası: " + data }); }
+          }
+        }).on("data", (d) => { data += d.toString(); });
+      });
+    }).on("error", (err) => {
+      if (!isResolved) {
+        isResolved = true;
+        clearTimeout(timeout);
+        resolve({ success: false, message: err.message });
+      }
+    }).connect({ host: config.host, port: 22, username: config.username || config.user, password: config.password, readyTimeout: 10000 });
+  });
+});
+
+ipcMain.handle("win:getServices", async (event, config) => {
+  return new Promise((resolve) => {
+    const conn = new Client();
+    const command = `powershell.exe -NoProfile -Command "Get-Service | Select-Object Name, DisplayName, Status | ConvertTo-Json"`;
+
+    conn.on("ready", () => {
+      conn.exec(command, (err, stream) => {
+        if (err) { conn.end(); return resolve({ success: false, message: err.message }); }
+        let data = "";
+        stream.on("close", () => {
+          conn.end();
+          try { resolve({ success: true, data: JSON.parse(data.trim()) }); }
+          catch (e) { resolve({ success: false, message: "Data parse error" }); }
+        }).on("data", (d) => { data += d.toString(); });
+      });
+    }).on("error", (err) => resolve({ success: false, message: err.message }))
+      .connect({ host: config.host, port: 22, username: config.username || config.user, password: config.password, readyTimeout: 10000 });
+  });
+});
+// --- Monitoring Service ---
+const ts = () => new Date().toLocaleTimeString('tr-TR', { hour12: false }) + '.' + new Date().getMilliseconds().toString().padStart(3, '0');
+
+const MonitoringService = {
+  sessions: new Map(), // serverId -> { interval, data, config, lastSync, preferredInterval }
+  dataLimit: 30000,
+  syncInterval: 60000 * 5, // 5 min
+  isAppFocused: true,
+
+  async getLogPath(serverId, dateStr) {
+    const basePath = getBasePath();
+    return path.join(basePath, "monitoring", `stats_${serverId}_${dateStr}.json`);
+  },
+
+  async getAvailableDates(serverId) {
+    const basePath = getBasePath();
+    const targetDir = path.join(basePath, "monitoring");
+    const dates = new Set();
+    
+    try {
+      const files = await fs.readdir(targetDir);
+      for (const file of files) {
+        // Daily file match: stats_serverId_YYYY-MM-DD.json
+        const dailyMatch = file.match(new RegExp(`^stats_${serverId}_(\\d{4}-\\d{2}-\\d{2})\\.json$`));
+        if (dailyMatch) {
+          dates.add(dailyMatch[1]);
+        }
+        
+        // Legacy file match: stats_serverId.json
+        if (file === `stats_${serverId}.json`) {
+          // Provide an approximation limit (today) so history UI works immediately instead of scanning massive DB
+          dates.add(new Date().toISOString().split('T')[0]);
+        }
+      }
+    } catch(e) {
+      console.warn(`[getAvailableDates] Failed to read monitoring dir for ${serverId}:`, e);
+    }
+    
+    // Convert to sorted array
+    return Array.from(dates).sort();
+  },
+
+  async loadHistory(serverId, dateStr) {
+    try {
+      const targetDate = dateStr || new Date().toISOString().split('T')[0];
+      const logPath = await this.getLogPath(serverId, targetDate);
+      
+      let content;
+      try {
+        content = await fs.readFile(logPath, "utf-8");
+      } catch (err) {
+        // If the daily file doesn't exist yet, attempt to load the legacy monolithic file
+        const basePath = getBasePath();
+        const legacyPath = path.join(basePath, "monitoring", `stats_${serverId}.json`);
+        try {
+          content = await fs.readFile(legacyPath, "utf-8");
+          const legacyData = JSON.parse(content);
+          
+          // Try to migrate legacy data into grouped structure so it works nicely in UI
+          const results = [];
+          legacyData.forEach(item => {
+             // Inject missing dates to old payload using current date as base, since they lost context
+             if (!item.Date) item.Date = targetDate;
+             if (item.Date === targetDate || !dateStr) {
+                 results.push(item);
+             }
+          });
+          return results;
+        } catch (legacyErr) {
+          return [];
+        }
+      }
+      
+      return JSON.parse(content);
+    } catch {
+      return [];
+    }
+  },
+
+  async saveHistory(serverId, data) {
+    try {
+      // Group data by Date
+      const groupedData = {};
+      data.forEach(item => {
+        const date = item.Date || new Date().toISOString().split('T')[0];
+        if (!groupedData[date]) groupedData[date] = [];
+        groupedData[date].push(item);
+      });
+
+      // Save each group to its respective daily file
+      for (const [date, dailyData] of Object.entries(groupedData)) {
+         const logPath = await this.getLogPath(serverId, date);
+         
+         const optimizedData = dailyData.slice(-this.dataLimit).map(item => {
+           // Shallow clone to avoid modifying active memory array elements directly
+           const prf = { ...item };
+           
+           // Disks array is massive and unused historically
+           delete prf.Disks;
+           
+           // TopProcs is only relevant if system load implies diagnostics
+           if (prf.CPU < 80 && (prf.RAM?.Percent || 0) < 85) {
+             delete prf.TopProcs;
+           }
+           return prf;
+         });
+
+         // Write pseudo-JSONL to preserve space but keep standard parseability
+         const content = "[\n" + optimizedData.map(d => "  " + JSON.stringify(d)).join(",\n") + "\n]";
+         await fs.writeFile(logPath, content, "utf-8");
+      }
+    } catch (err) {
+      console.error(`Save history error (${serverId}):`, err);
+    }
+  },
+
+  async start(server) {
+    const serverId = server.ID || server.id || server.host;
+    if (this.sessions.has(serverId)) return;
+
+    // Register immediately as 'initializing' to prevent race conditions from quick re-entry
+    this.sessions.set(serverId, { status: "initializing" });
+    console.log(`[${ts()}] Starting background monitoring for: ${serverId}`);
+
+    const history = await this.loadHistory(serverId);
+
+    // Check if it was stopped while we were loading history
+    if (!this.sessions.has(serverId)) return;
+
+    const session = {
+      config: server,
+      data: history,
+      interval: null,
+      lastSync: Date.now(),
+      consecutiveErrors: 0,
+      status: "connecting",
+      lastError: null,
+      lastInterval: 3000,
+      preferredInterval: 3000,
+      sshClient: null,
+      isConnecting: false,
+      isProcessing: false
+    };
+
+    this.sessions.set(serverId, session);
+
+    // Initial fetch
+    this.runCycle(serverId);
+
+    // Set initial interval
+    session.interval = setInterval(() => this.runCycle(serverId), 3000);
+  },
+
+  async runCycle(serverId) {
+    const sess = this.sessions.get(serverId);
+    if (!sess || sess.status === "initializing" || sess.isProcessing) return;
+
+    sess.isProcessing = true;
+    try {
+      const res = await this.performFetch(sess.config);
+
+      if (res.success) {
+        sess.data.push(res.data);
+        if (sess.data.length > this.dataLimit) sess.data.shift();
+
+        if (sess.consecutiveErrors > 0 || sess.status !== "connected") {
+          sess.consecutiveErrors = 0;
+          sess.status = "connected";
+          sess.lastError = null;
+          console.log(`[${ts()}] Monitoring (${serverId}) successfully recovered and connected.`);
+          this.broadcastStatus(serverId, sess);
+          const activeInterval = this.isAppFocused ? sess.preferredInterval : 30000;
+          this.adjustInterval(serverId, activeInterval);
+        }
+
+        if (mainWindow) {
+          mainWindow.webContents.send(`monitoring:update:${serverId}`, res.data);
+        }
+
+        if (Date.now() - sess.lastSync > this.syncInterval) {
+          this.saveHistory(serverId, sess.data);
+          sess.lastSync = Date.now();
+        }
+      } else {
+        sess.consecutiveErrors++;
+        sess.lastError = res.message;
+
+        let newStatus = "connecting";
+        const baseDelay = 5000;
+        const maxDelay = 120000;
+        // Exponential backoff: 5s, 7.5s, 11s, 16s... up to 120s
+        const retryDelay = Math.round(Math.min(baseDelay * Math.pow(1.5, Math.max(0, sess.consecutiveErrors - 1)), maxDelay));
+
+        if (sess.consecutiveErrors > 15) {
+          newStatus = "error";
+        } else if (sess.consecutiveErrors > 2) {
+          newStatus = "retrying";
+        }
+
+        if (sess.status !== newStatus || sess.lastInterval !== retryDelay) {
+          sess.status = newStatus;
+          console.warn(`[${ts()}] [Geri Çekilme - Backoff] (${serverId}) Hata: ${res.message}. ${Math.round(retryDelay / 1000)}s sonra tekrar denenecek. (Deneme: ${sess.consecutiveErrors})`);
+          this.broadcastStatus(serverId, sess);
+          this.adjustInterval(serverId, retryDelay);
+        }
+      }
+    } catch (e) {
+      console.error(`[${ts()}] Monitoring (${serverId}) crash:`, e);
+    } finally {
+      sess.isProcessing = false;
+    }
+  },
+
+  updateInterval(serverId, newMs) {
+    const sess = this.sessions.get(serverId);
+    if (!sess) return;
+
+    sess.preferredInterval = newMs;
+
+    // Do not override actual interval if we are actively in backoff state
+    if (sess.consecutiveErrors > 0 || sess.status === "error" || sess.status === "retrying") return;
+
+    const actualInterval = this.isAppFocused ? sess.preferredInterval : 30000;
+    this.adjustInterval(serverId, actualInterval);
+  },
+
+  updateGlobalFocus(focused) {
+    this.isAppFocused = focused;
+    console.log(`[${ts()}] Monitoring Service: App focus changed to ${focused}. Adjusting intervals...`);
+
+    for (const [serverId, sess] of this.sessions.entries()) {
+      if (sess.consecutiveErrors > 0 || sess.status === "error" || sess.status === "retrying") continue;
+
+      const actualInterval = focused ? sess.preferredInterval : 30000;
+      this.adjustInterval(serverId, actualInterval);
+    }
+  },
+
+  broadcastStatus(serverId, sess) {
+    if (mainWindow) {
+      mainWindow.webContents.send(`monitoring:status:${serverId}`, {
+        status: sess.status,
+        lastError: sess.lastError,
+        consecutiveErrors: sess.consecutiveErrors
+      });
+    }
+  },
+
+  adjustInterval(serverId, newMs) {
+    const sess = this.sessions.get(serverId);
+    if (!sess) return;
+    if (sess.lastInterval === newMs) return;
+
+    if (sess.interval) clearInterval(sess.interval);
+    sess.interval = setInterval(() => this.runCycle(serverId), newMs);
+    sess.lastInterval = newMs;
+  },
+
+  async getConnection(serverId, config) {
+    const sess = this.sessions.get(serverId);
+    if (!sess) return null;
+
+    // Use the existing connection if it is active. 
+    // The "close" or "error" listeners will actively nullify this if it drops.
+    if (sess.sshClient) {
+      return sess.sshClient;
+    }
+
+    if (sess.isConnecting) {
+      // Wait for current connection attempt
+      return new Promise((resolve) => {
+        const check = setInterval(() => {
+          if (!sess.isConnecting) {
+            clearInterval(check);
+            resolve(sess.sshClient?._state === 'authenticated' ? sess.sshClient : null);
+          }
+        }, 100);
+        setTimeout(() => { clearInterval(check); resolve(null); }, 15000);
+      });
+    }
+
+    sess.isConnecting = true;
+    console.log(`[${ts()}] Monitoring: Connecting to ${config.host}...`);
+    return new Promise((resolve) => {
+      const conn = new Client();
+
+      const timeout = setTimeout(() => {
+        if (sess.isConnecting) {
+          sess.isConnecting = false;
+          try { conn.destroy(); } catch (e) { }
+          resolve(null);
+        }
+      }, 20000);
+
+      conn.on("ready", () => {
+        console.log(`[${ts()}] Monitoring: Successfully connected to ${config.host}`);
+        clearTimeout(timeout);
+        sess.sshClient = conn;
+        sess.isConnecting = false;
+        resolve(conn);
+      }).on("error", (err) => {
+        let errType = "Bilinmeyen Ağ Hatası";
+        if (err.message.includes("ECONNRESET")) errType = "Sunucu bağlantıyı kesti (ECONNRESET - Limit veya Yük)";
+        else if (err.message.includes("handshake")) errType = "Handshake Hatası (SSH servisi yanıt vermiyor)";
+        else if (err.message.includes("ETIMEDOUT")) errType = "Zaman Aşımı (Sunucuya ulaşılamıyor)";
+        else if (err.message.includes("ENOTFOUND")) errType = "Sunucu bulunamadı (ENOTFOUND)";
+
+        console.error(`[${ts()}] [Bağlantı Hatası] (${config.host}) Tür: ${errType} | Detay: ${err.message}`);
+        clearTimeout(timeout);
+        sess.sshClient = null;
+        sess.isConnecting = false;
+        try { conn.destroy(); } catch (e) { }
+        resolve(null);
+      }).on("close", () => {
+        console.log(`[${ts()}] Monitoring SSH Closed (${config.host})`);
+        sess.sshClient = null;
+        sess.isConnecting = false;
+        try { conn.destroy(); } catch (e) { }
+      }).connect({
+        host: config.host,
+        port: config.port || 22,
+        username: config.username,
+        password: config.password,
+        keepaliveInterval: 10000,
+        keepaliveCountMax: 3,
+        readyTimeout: 30000
+      });
+    });
+  },
+
+  async performFetch(config) {
+    const serverId = config.id || config.host;
+    const conn = await this.getConnection(serverId, config);
+
+    if (!conn) {
+      return { success: false, message: "Could not establish persistent connection" };
+    }
+
+    return new Promise((resolve) => {
+      let isResolved = false;
+      let data = "";
+
+      const timeout = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          try {
+            const sess = this.sessions.get(serverId);
+            if (sess && sess.sshClient === conn) sess.sshClient = null;
+            conn.destroy(); // Brutally kill the hung connection to prevent ghost channels
+          } catch(e) {}
+          resolve({ success: false, message: "Timeout" });
+        }
+      }, 30000);
+
+      const command = `powershell.exe -NoProfile -Command "$cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \\"Name='_Total'\\" -Property PercentProcessorTime).PercentProcessorTime; $mem = Get-CimInstance Win32_OperatingSystem -Property TotalVisibleMemorySize, FreePhysicalMemory; $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3 OR DriveType=2' -Property DeviceID, Size, FreeSpace, VolumeName; $diskIO = (Get-CimInstance Win32_PerfFormattedData_PerfDisk_LogicalDisk -Filter \\"Name='_Total'\\" -Property DiskBytesPersec).DiskBytesPersec; $netIO = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface -Property BytesTotalPersec | Measure-Object -Property BytesTotalPersec -Sum).Sum; if ($null -eq $netIO) { $netIO = 0 }; $procCount = (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors; if ($null -eq $procCount -or $procCount -lt 1) { $procCount = 1 }; $procs = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter \\"Name != '_Total' AND Name != 'Idle'\\" -Property Name, PercentProcessorTime | Sort-Object PercentProcessorTime -Descending | Select-Object -First 5 | ForEach-Object { @{ Name = $_.Name; CPU = [Math]::Round(($_.PercentProcessorTime / $procCount), 1) } }; $info = @{ CPU = [Math]::Round([double]$cpu, 1); RAM = @{ Total = [Math]::Round([double]$mem.TotalVisibleMemorySize / 1MB, 2); Used = [Math]::Round(([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / 1MB, 2); Percent = [Math]::Round(((([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / ([double]$mem.TotalVisibleMemorySize + 1)) * 100), 1) }; Disks = @($disks | ForEach-Object { @{ ID = $_.DeviceID; Name = $_.VolumeName; Total = [Math]::Round([double]$_.Size / 1GB, 2); Free = [Math]::Round([double]$_.FreeSpace / 1GB, 2); Percent = [Math]::Round(((([double]$_.Size - [double]$_.FreeSpace) / ([double]$_.Size + 0.1)) * 100), 1) }; }); IO = @{ DiskRW = [Math]::Round([double]$diskIO / 1MB, 2); Network = [Math]::Round([double]$netIO / 1KB, 2) }; TopProcs = $procs; Timestamp = Get-Date -Format 'HH:mm:ss' }; $info | ConvertTo-Json -Depth 5"`;
+
+      conn.exec(command, (err, stream) => {
+        if (err) {
+          if (!isResolved) {
+            isResolved = true;
+            clearTimeout(timeout);
+            console.error(`[${ts()}] [Komut Gönderme Hatası] (${serverId}):`, err.message);
+            resolve({ success: false, message: err.message });
+          }
+          return;
+        }
+
+        let stdErrData = "";
+        stream.stderr.on("data", (d) => { stdErrData += d.toString(); });
+        stream.on("data", (d) => { data += d.toString(); });
+        stream.on("close", (code, signal) => {
+          if (!isResolved) {
+            isResolved = true;
+            clearTimeout(timeout);
+            
+            if (stdErrData) {
+              console.error(`[${ts()}] [PowerShell Hatası] (${serverId}):`, stdErrData.trim());
+            }
+            if (code !== 0 && code !== undefined) {
+              console.error(`[${ts()}] [Süreç Hatası] (${serverId}): PowerShell beklenmeyen bir kodla çıktı (${code})`);
+            }
+
+            try {
+              const res = JSON.parse(data.trim());
+              res.Date = new Date().toISOString().split('T')[0]; // Inject Date for daily grouping
+              resolve({ success: true, data: res });
+            } catch (e) {
+              console.error(`[${ts()}] [Ayrıştırma / JSON Hatası] (${serverId}): Sunucudan gelen veri işlenemedi. Gelen veri:`, data.substring(0, 200) + "...");
+              resolve({ success: false, message: "Geçersiz veya boş veri. (Parse error)" });
+            }
+          }
+        });
+      });
+    });
+  }
+};
+
+ipcMain.handle("monitoring:start", (event, server) => {
+  MonitoringService.start(server);
+  return { success: true };
+});
+
+ipcMain.handle("monitoring:getHistory", async (event, args) => {
+  // Support both old `serverId` string and new `{serverId, dateStr}` object calls
+  const serverId = typeof args === 'string' ? args : args.serverId;
+  const dateStr = typeof args === 'string' ? null : args.dateStr;
+
+  const session = MonitoringService.sessions.get(serverId);
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  const isTargetingToday = !dateStr || dateStr === todayDateStr;
+
+  // Only return session data if it's already fully loaded & we're asking for today
+  if (session && session.data && isTargetingToday) {
+    return { success: true, data: session.data };
+  }
+  
+  // Fetch from disk for the specified date
+  const history = await MonitoringService.loadHistory(serverId, dateStr);
+  return { success: true, data: history };
+});
+
+ipcMain.handle("monitoring:getAvailableDates", async (event, serverId) => {
+  const dates = await MonitoringService.getAvailableDates(serverId);
+  return { success: true, data: dates };
+});
+
+ipcMain.handle("monitoring:stop", (event, serverId) => {
+  const sess = MonitoringService.sessions.get(serverId);
+  if (sess) {
+    if (sess.interval) clearInterval(sess.interval);
+    if (sess.sshClient) {
+      try { sess.sshClient.end(); } catch (e) { }
+    }
+    MonitoringService.saveHistory(serverId, sess.data);
+    MonitoringService.sessions.delete(serverId);
+  }
+  return { success: true };
+});
+
+ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'last24h', lang = 'tr', dateRange, dateStr }) => {
+  const serverId = server.id || server.host;
+
+  let history = [];
+  
+  // Backwards compat with single date requests or range reports
+  if (dateRange && dateRange.start && dateRange.end) {
+    // Generate an array of dates between start and end inclusive
+    const start = new Date(dateRange.start);
+    const end = new Date(dateRange.end);
+    let iter = new Date(start);
+    
+    while (iter <= end) {
+      const iterStr = iter.toISOString().split('T')[0];
+      const items = await MonitoringService.loadHistory(serverId, iterStr);
+      history = history.concat(items);
+      iter.setDate(iter.getDate() + 1);
+    }
+  } else {
+    // Legacy single date handler
+    const todayDateStr = new Date().toISOString().split('T')[0];
+    const targetDate = dateStr || todayDateStr;
+    const isTargetingToday = targetDate === todayDateStr;
+
+    if (isTargetingToday) {
+      // Try memory first for today's active session
+      const sess = MonitoringService.sessions.get(serverId);
+      history = sess ? [...sess.data] : [];
+      if (history.length === 0) {
+        history = await MonitoringService.loadHistory(serverId, todayDateStr);
+      }
+    } else {
+      // Exact history day pull
+      history = await MonitoringService.loadHistory(serverId, dateStr);
+    }
+  }
+
+  const i18n = {
+    tr: {
+      noData: "Rapor için yeterli veri bulunamadı. Lütfen en az 5 veri noktası (yaklaşık 15 saniye) toplanmasını bekleyin.",
+      reportTitle: "VESGEN PERFORMANS RAPORU",
+      duration: "Gözlem Süresi",
+      seconds: "Saniye",
+      avgCpu: "Ortalama İşlemci Yükü (CPU)",
+      avgRam: "Ortalama Bellek Kullanımı (RAM)",
+      avgDisk: "Disk Trafiği (Ortalama)",
+      avgNet: "Ağ Trafiği (Ortalama)",
+      observations: "Anatomi ve Kritik Gözlemler",
+      stable: "Tüm sistem parametreleri stabil seyretti. Herhangi bir anomali saptanmadı.",
+      detected: "Tespit Edildi",
+      footer: "Bu rapor Vesgen Professional Monitoring Service tarafından otomatik olarak oluşturulmuştur.",
+      diagnostics: {
+        perfect: "Sistem performansı oldukça iyi ve stabil.",
+        normal: "Sistem normal yük altında çalışıyor.",
+        heavy: "Sistem yükü yüksek, süreçleri kontrol etmenizi öneririz.",
+        ramCritical: "Bellek kullanımı kritik seviyede!"
+      },
+      suspectedProcesses: "Şüpheli Uygulamalar / Süreçler",
+      cpuCritical: "Kritik İşlemci Yükü",
+      ramAnom: "Kritik Bellek Kullanımı",
+      valLabel: "Değer",
+      timeLabel: "Saat",
+      saveTitle: "Performans Raporunu Kaydet",
+      cancel: "İşlem iptal edildi."
+    },
+    en: {
+      noData: "Not enough data found for report. Please wait for at least 5 data points (~15 seconds).",
+      reportTitle: "VESGEN PERFORMANCE REPORT",
+      duration: "Observation Period",
+      seconds: "Seconds",
+      avgCpu: "Average CPU Load",
+      avgRam: "Average Memory Usage (RAM)",
+      avgDisk: "Disk Traffic (Average)",
+      avgNet: "Network Traffic (Average)",
+      observations: "Anatomy & Critical Observations",
+      stable: "All system parameters remained stable. No anomalies detected.",
+      detected: "Detected",
+      footer: "This report was automatically generated by Vesgen Professional Monitoring Service.",
+      diagnostics: {
+        perfect: "System performance is excellent and stable.",
+        normal: "System is operating under normal load.",
+        heavy: "High system load detected, recommended to check active processes.",
+        ramCritical: "Memory usage is at a critical level!"
+      },
+      suspectedProcesses: "Suspected Applications / Processes",
+      cpuCritical: "Critical CPU Load",
+      ramAnom: "Critical Memory Usage",
+      valLabel: "Value",
+      timeLabel: "Time",
+      saveTitle: "Save Performance Report",
+      cancel: "Process cancelled."
+    }
+  };
+
+  const t = i18n[lang] || i18n.en;
+
+  if (!history || history.length < 5) {
+    return { success: false, message: t.noData };
+  }
+
+  // Calculate stats
+  const stats = {
+    cpu: { avg: 0, max: 0, min: 100 },
+    ram: { avg: 0, max: 0, min: 100 },
+    disk: { avg: 0, max: 0, min: 99999 },
+    net: { avg: 0, max: 0, min: 99999 },
+    counts: history.length,
+    anomalies: []
+  };
+
+  history.forEach(d => {
+    // CPU
+    const cpuVal = d.CPU || 0;
+    stats.cpu.avg += cpuVal;
+    if (cpuVal > stats.cpu.max) stats.cpu.max = cpuVal;
+    if (cpuVal < stats.cpu.min) stats.cpu.min = cpuVal;
+    if (cpuVal > 80) stats.anomalies.push({ type: t.cpuCritical, val: `%${cpuVal}`, time: d.Timestamp, procs: d.TopProcs });
+
+    // RAM
+    const ramVal = d.RAM?.Percent || 0;
+    stats.ram.avg += ramVal;
+    if (ramVal > stats.ram.max) stats.ram.max = ramVal;
+    if (ramVal < stats.ram.min) stats.ram.min = ramVal;
+    if (ramVal > 85) stats.anomalies.push({ type: t.ramAnom, val: `%${ramVal}`, time: d.Timestamp, procs: d.TopProcs });
+
+    // Disk
+    const dVal = d.IO?.DiskRW || 0;
+    stats.disk.avg += dVal;
+    if (dVal > stats.disk.max) stats.disk.max = dVal;
+    if (dVal < stats.disk.min) stats.disk.min = dVal;
+
+    // Network
+    const nVal = d.IO?.Network || 0;
+    stats.net.avg += nVal;
+    if (nVal > stats.net.max) stats.net.max = nVal;
+    if (nVal < stats.net.min) stats.net.min = nVal;
+  });
+
+  stats.cpu.avg = Number((stats.cpu.avg / stats.counts).toFixed(1));
+  stats.ram.avg = Number((stats.ram.avg / stats.counts).toFixed(1));
+  stats.disk.avg = Number((stats.disk.avg / stats.counts).toFixed(1));
+  stats.net.avg = Number((stats.net.avg / stats.counts).toFixed(1));
+
+  // Smart Diagnostics
+  let diagText = "";
+  if (stats.cpu.avg < 30) diagText = t.diagnostics.perfect;
+  else if (stats.cpu.avg < 60) diagText = t.diagnostics.normal;
+  else diagText = t.diagnostics.heavy;
+
+  if (stats.ram.avg > 85) diagText += ` ${t.diagnostics.ramCritical}`;
+
+  // HTML Template
+  const reportHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1a1a1a; background: #fff; line-height: 1.5; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #f59e0b; padding-bottom: 20px; margin-bottom: 30px; }
+        .title { color: #f59e0b; font-size: 28px; font-weight: 800; margin: 0; }
+        .server-info { font-style: italic; color: #666; font-size: 14px; }
+        .card { border: 1px solid #eee; padding: 20px; border-radius: 12px; background: #fafafa; }
+        .card-title { font-size: 10px; font-weight: 900; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        .val-big { font-size: 32px; font-weight: 800; color: #111; }
+        .stats-row { display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: #666; }
+        .anomaly-card { border-left: 4px solid #ef4444; background: #fef2f2; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+        .diag-card { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; font-weight: 600; color: #1e40af; }
+        .footer { margin-top: 50px; text-align: center; color: #aaa; font-size: 10px; border-top: 1px solid #eee; padding-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <h1 class="title">${t.reportTitle}</h1>
+          <div class="server-info">${server.alias || server.name} (${server.host})</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: bold; font-size: 12px;">${new Date().toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US')}</div>
+          <div style="font-size: 10px; color: #999;">${t.duration}: ~${stats.counts * 3} ${t.seconds}</div>
+        </div>
+      </div>
+
+      <div class="diag-card">${diagText}</div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+        <div class="card">
+          <div class="card-title">${t.avgCpu}</div>
+          <div class="val-big">%${stats.cpu.avg}</div>
+          <div class="stats-row text-sm"><span>Peak: %${stats.cpu.max}</span> <span>Min: %${stats.cpu.min}</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title">${t.avgRam}</div>
+          <div class="val-big">%${stats.ram.avg}</div>
+          <div class="stats-row"><span>Peak: %${stats.ram.max}</span> <span>Min: %${stats.ram.min}</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title">${t.avgDisk}</div>
+          <div class="val-big">${stats.disk.avg} MB/s</div>
+          <div class="stats-row"><span>Max: ${stats.disk.max} MB/s</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title">${t.avgNet}</div>
+          <div class="val-big">${stats.net.avg} KB/s</div>
+          <div class="stats-row"><span>Max: ${stats.net.max} KB/s</span></div>
+        </div>
+      </div>
+
+      <h2 style="font-size: 14px; text-transform: uppercase; color: #666; margin-bottom: 15px;">${t.observations}</h2>
+      ${stats.anomalies.length > 0 ? stats.anomalies.slice(0, 10).map(a => `
+        <div class="anomaly-card">
+          <div style="font-weight: bold; color: #b91c1c;">${a.type} ${t.detected}</div>
+          <div style="font-size: 12px; color: #444;">${t.valLabel}: ${a.val} | ${t.timeLabel}: ${a.time}</div>
+          ${a.procs && a.procs.length > 0 ? `
+            <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dotted #fecaca;">
+              <div style="font-size: 9px; font-weight: bold; color: #991b1b; text-transform: uppercase; margin-bottom: 5px;">${t.suspectedProcesses}:</div>
+              ${a.procs.map(p => `
+                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+                  <span style="color: #1f2937;">${p.Name}</span>
+                  <span style="font-weight: bold; color: #b91c1c;">%${p.CPU}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `).join('') : `<div style="color: #059669; font-weight: bold;">${t.stable}</div>`}
+
+      <div class="footer">
+        ${t.footer}<br/>
+        &copy; 2026 Vesgen Performance Systems
+      </div>
+    </body>
+    </html>
+  `;
+
+  const fileName = `Vesgen_Report_${serverId}_${new Date().getTime()}.pdf`;
+  const { filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: t.saveTitle,
+    defaultPath: path.join(app.getPath('downloads'), fileName),
+    filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+  });
+
+  if (!filePath) return { success: false, message: t.cancel };
+
+  const workerWindow = new BrowserWindow({ show: false });
+  await workerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(reportHtml)}`);
+
+  try {
+    const pdfData = await workerWindow.webContents.printToPDF({
+      printBackground: true,
+      marginsType: 1,
+      pageSize: 'A4'
+    });
+
+    const fsSync = require("fs");
+    fsSync.writeFileSync(filePath, pdfData);
+    workerWindow.destroy();
+
+    // Open the PDF automatically
+    shell.openPath(filePath);
+
+    return { success: true, path: filePath };
+  } catch (err) {
+    workerWindow.destroy();
+    return { success: false, message: "PDF oluşturma hatası: " + err.message };
+  }
+});
+
+ipcMain.handle("monitoring:updateInterval", (event, serverId, intervalMs) => {
+  MonitoringService.updateInterval(serverId, intervalMs);
+  return { success: true };
+});

@@ -46,7 +46,7 @@ import PageLayout from "@/components/PageLayout";
 import { APP_INFO } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 interface TenantsPageProps {
   onSelectTenant: (tenantId: string) => void;

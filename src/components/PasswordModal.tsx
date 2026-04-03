@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 interface PasswordModalProps {
   isOpen: boolean;
@@ -44,7 +44,7 @@ export default function PasswordModal({
     setLoading(true);
 
     try {
-      const res = await (window as any).electronAPI.authVerifyAdmin(password);
+      const res = await window.electronAPI.authVerifyAdmin(password);
 
       if (res?.success) {
         setPassword("");

@@ -39,8 +39,8 @@ export const useSqlJobs = () => {
   const fetchJobs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await (window as any).electronAPI.dbGetSqlJobs();
-      if (res?.success) setJobs(res.data);
+      const res = await window.electronAPI.dbGetSqlJobs();
+      if (res?.success && res.data) setJobs(res.data);
     } catch (error) {
       console.error(error);
     } finally {
@@ -53,7 +53,7 @@ export const useSqlJobs = () => {
     action: "start" | "stop",
   ) => {
     try {
-      return await (window as any).electronAPI.dbExecuteJobAction({
+      return await window.electronAPI.dbExecuteJobAction({
         jobName,
         action,
       });
@@ -64,7 +64,7 @@ export const useSqlJobs = () => {
 
   const toggleJob = async (jobName: string, enabled: boolean) => {
     try {
-      return await (window as any).electronAPI.dbToggleSqlJob({
+      return await window.electronAPI.dbToggleSqlJob({
         jobName,
         enabled,
       });
@@ -75,8 +75,8 @@ export const useSqlJobs = () => {
 
   const getJobHistory = async (jobName: string): Promise<JobHistory[]> => {
     try {
-      const res = await (window as any).electronAPI.dbGetSqlJobHistory(jobName);
-      return res?.success ? res.data : [];
+      const res = await window.electronAPI.dbGetSqlJobHistory(jobName);
+      return (res?.success && res.data) ? res.data : [];
     } catch (error) {
       return [];
     }
@@ -84,17 +84,17 @@ export const useSqlJobs = () => {
 
   const getJobDetails = async (jobName: string) => {
     try {
-      const res = await (window as any).electronAPI.dbGetSqlJobDetails(jobName);
-      return res?.success ? res.data : { steps: [], schedules: [] };
+      const res = await window.electronAPI.dbGetSqlJobDetails(jobName);
+      return (res?.success && res.data) ? res.data : { steps: [], schedules: [] };
     } catch (error) {
       return { steps: [], schedules: [] };
     }
   };
 
-  const getCurrentDbName = async () => {
+  const getCurrentDbName = async (): Promise<string> => {
     try {
-      const res = await (window as any).electronAPI.dbGetCurrentDbName();
-      return res?.success ? res.data : "master";
+      const res = await window.electronAPI.dbGetCurrentDbName();
+      return res?.success && res.data ? res.data : "master";
     } catch (error) {
       return "master";
     }
@@ -106,7 +106,7 @@ export const useSqlJobs = () => {
     jobData: any,
   ) => {
     try {
-      return await (window as any).electronAPI.dbSaveJobMaster({
+      return await window.electronAPI.dbSaveJobMaster({
         isEdit,
         originalName,
         jobData,

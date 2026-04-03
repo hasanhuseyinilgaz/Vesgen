@@ -32,16 +32,16 @@ import {
 } from "lucide-react";
 
 import { exportToExcel } from "@/lib/exportUtils";
-import { extractLineNumber } from "@/lib/sqlUtils";
+import { extractLineNumber, SCHEMA_QUERY } from "@/lib/sqlUtils";
 import { useAuthGate } from "@/hooks/useAuthGate";
 
-import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
+import ActivityMonitorRefreshPanel from "@/components/ActivityMonitorRefreshPanel";
 import DataTable, { SortDirection, SortConfig } from "@/components/DataTable";
 import SqlCodeViewer from "@/components/SqlCodeViewer";
-import SearchableSidebar from "@/components/SearchableSidebar";
+import SearchableListPanel from "@/components/SearchableListPanel";
 import PageLayout from "@/components/PageLayout";
 import PasswordModal from "@/components/PasswordModal";
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 import PageHeader from "@/components/PageHeader";
 
 export interface OpenTab {
@@ -237,8 +237,8 @@ export default function QueriesPage() {
   const loadQueries = async () => {
     setLoading(true);
     try {
-      if ((window as any).electronAPI?.fsReadQueries) {
-        const res = await (window as any).electronAPI.fsReadQueries();
+      if (window.electronAPI) {
+        const res = await window.electronAPI.fsReadQueries();
         if (res && res.success) setQueries(res.data || []);
       }
     } finally {
@@ -248,17 +248,8 @@ export default function QueriesPage() {
 
   const loadDatabaseSchema = async () => {
     try {
-      if ((window as any).electronAPI?.dbExecuteQuery) {
-        const schemaQuery = `
-          SELECT name AS ItemName, 'TABLE' AS ItemType FROM sys.tables WHERE is_ms_shipped = 0
-          UNION ALL
-          SELECT name AS ItemName, 'VIEW' AS ItemType FROM sys.views WHERE is_ms_shipped = 0
-          UNION ALL
-          SELECT name AS ItemName, 'PROCEDURE' AS ItemType FROM sys.procedures WHERE is_ms_shipped = 0
-          UNION ALL
-          SELECT DISTINCT name AS ItemName, 'COLUMN' AS ItemType FROM sys.columns
-        `;
-        const res = await (window as any).electronAPI.dbExecuteQuery(schemaQuery);
+      if (window.electronAPI) {
+        const res = await window.electronAPI.dbExecuteQuery(SCHEMA_QUERY);
         if (res?.success && res.data) {
           const schema = { tables: [] as string[], views: [] as string[], procedures: [] as string[], columns: [] as string[] };
           res.data.forEach((row: any) => {
@@ -395,7 +386,7 @@ export default function QueriesPage() {
     }
 
     try {
-      const execResult = await (window as any).electronAPI.dbExecuteQuery(currentTab.content);
+      const execResult = await window.electronAPI.dbExecuteQuery(currentTab.content);
       if (execResult?.success) {
         setResult({ 
           success: true, 
@@ -426,7 +417,7 @@ export default function QueriesPage() {
     setLoading(true);
     try {
       const savedName = newQueryName.endsWith(".sql") ? newQueryName : `${newQueryName}.sql`;
-      const res = await (window as any).electronAPI.fsSaveQuery({
+      const res = await window.electronAPI.fsSaveQuery({
         filename: savedName,
         content: currentTab.content,
       });
@@ -461,7 +452,7 @@ export default function QueriesPage() {
     if (!currentTab || !currentTab.filename || !currentTab.content.trim()) return;
     setLoading(true);
     try {
-      const res = await (window as any).electronAPI.fsSaveQuery({
+      const res = await window.electronAPI.fsSaveQuery({
         filename: currentTab.filename,
         content: currentTab.content,
       });
@@ -483,7 +474,7 @@ export default function QueriesPage() {
     if (!currentTab || !currentTab.filename) return;
     setLoading(true);
     try {
-      const res = await (window as any).electronAPI.fsDeleteQuery(currentTab.filename);
+      const res = await window.electronAPI.fsDeleteQuery(currentTab.filename);
       if (res?.success) {
         setIsDeleteModalOpen(false);
         await loadQueries();
@@ -523,7 +514,7 @@ export default function QueriesPage() {
   return (
     <PageLayout
       sidebar={
-        <SearchableSidebar
+        <SearchableListPanel
           title={t("queries.title", "Sorgular")}
           icon={FileCode}
           items={queries.map((q) => ({ id: q.filename, label: q.name }))}
@@ -920,7 +911,7 @@ export default function QueriesPage() {
 
         {activeTabId && showLivePanel && (
           <div className="shrink-0 border rounded-xl glass-card overflow-hidden">
-            <LiveMonitoringPanel onRefresh={handleLiveRefresh} onStatusChange={() => { }} />
+            <ActivityMonitorRefreshPanel onRefresh={handleLiveRefresh} onStatusChange={() => { }} />
           </div>
         )}
       </div>

@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -116,7 +116,7 @@ export default function SettingsPage() {
     setIsAuthLoading(true);
 
     try {
-      const res = await (window as any).electronAPI.authVerifyAdmin(
+      const res = await window.electronAPI.authVerifyAdmin(
         authPassword,
       );
       if (res?.success) {

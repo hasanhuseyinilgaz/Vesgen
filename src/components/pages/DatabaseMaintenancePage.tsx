@@ -22,7 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import CustomTabs from "@/components/CustomTabs";
+import CustomTabs from "@/components/ui/custom-tabs";
 import EmptyState from "@/components/EmptyState";
 import {
   Dialog,
@@ -42,7 +42,7 @@ import {
   FragmentedIndex,
 } from "@/hooks/useDatabaseMaintenance";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 export default function DatabaseMaintenancePage() {
   const { t } = useTranslation();
@@ -104,8 +104,8 @@ export default function DatabaseMaintenancePage() {
     const uniqueId = `${index.TableName}_${index.IndexName}`;
     setFixingIndexId(uniqueId);
     try {
-      if ((window as any).electronAPI?.dbFixIndex) {
-        const result = await (window as any).electronAPI.dbFixIndex({
+      if (window.electronAPI) {
+        const result = await window.electronAPI.dbFixIndex({
           tableName: index.TableName,
           indexName: index.IndexName,
           fragmentation: index.Fragmentation,
@@ -115,7 +115,7 @@ export default function DatabaseMaintenancePage() {
           setIndexes((prev) =>
             prev.map((i) =>
               `${i.TableName}_${i.IndexName}` === uniqueId
-                ? { ...i, Fragmentation: result.newFragmentation }
+                ? { ...i, Fragmentation: result.newFragmentation || i.Fragmentation }
                 : i,
             ),
           );
@@ -126,21 +126,21 @@ export default function DatabaseMaintenancePage() {
             isOpen: true,
             success: true,
             title: t("maintenance.indexFixSuccess"),
-            message: result.message,
+            message: result.message || "",
             targetName: index.IndexName,
             action:
-              result.action === "REBUILD"
+              (result.action || "") === "REBUILD"
                 ? t("maintenance.indexFixRebuild")
                 : t("maintenance.indexFixReorganize"),
             oldVal: index.Fragmentation,
-            newVal: result.newFragmentation,
+            newVal: result.newFragmentation || 0,
           });
         } else {
           setResultModal({
             isOpen: true,
             success: false,
             title: t("maintenance.indexFixFailed"),
-            message: result.message,
+            message: result.message || "",
             targetName: index.IndexName,
             action: "",
             oldVal: 0,
@@ -167,15 +167,15 @@ export default function DatabaseMaintenancePage() {
   const executeShrinkLog = async () => {
     setIsShrinking(true);
     try {
-      if ((window as any).electronAPI?.dbShrinkLogFile) {
-        const result = await (window as any).electronAPI.dbShrinkLogFile();
+      if (window.electronAPI) {
+        const result = await window.electronAPI.dbShrinkLogFile();
         setResultModal({
           isOpen: true,
           success: result.success,
           title: result.success
             ? t("maintenance.logShrinkSuccess")
             : t("maintenance.logShrinkFailed"),
-          message: result.message,
+          message: result.message || "",
           targetName: "",
           action: "",
           oldVal: 0,
@@ -202,7 +202,7 @@ export default function DatabaseMaintenancePage() {
   const executeUpdateTableStat = async (tableName: string) => {
     setUpdatingTableStat(tableName);
     try {
-      if ((window as any).electronAPI?.dbUpdateTableStatistics) {
+      if (window.electronAPI) {
         const result = await (
           window as any
         ).electronAPI.dbUpdateTableStatistics(tableName);
@@ -211,7 +211,7 @@ export default function DatabaseMaintenancePage() {
             isOpen: true,
             success: true,
             title: t("maintenance.statUpdateSuccess"),
-            message: result.message,
+            message: result.message || "",
             targetName: tableName,
             action: t("maintenance.statUpdateAction"),
             oldVal: 0,
@@ -223,7 +223,7 @@ export default function DatabaseMaintenancePage() {
             isOpen: true,
             success: false,
             title: t("maintenance.errorTitle"),
-            message: result.message,
+            message: result.message || "",
             targetName: tableName,
             action: "",
             oldVal: 0,
@@ -250,7 +250,7 @@ export default function DatabaseMaintenancePage() {
   const executeUpdateAllStats = async () => {
     setIsUpdatingAllStats(true);
     try {
-      if ((window as any).electronAPI?.dbUpdateAllStatistics) {
+      if (window.electronAPI) {
         const result = await (
           window as any
         ).electronAPI.dbUpdateAllStatistics();
@@ -259,7 +259,7 @@ export default function DatabaseMaintenancePage() {
             isOpen: true,
             success: true,
             title: t("maintenance.allStatsUpdateSuccess"),
-            message: result.message,
+            message: result.message || "",
             targetName: t("maintenance.allDatabase"),
             action: t("maintenance.allStatsUpdateAction"),
             oldVal: 0,
@@ -271,7 +271,7 @@ export default function DatabaseMaintenancePage() {
             isOpen: true,
             success: false,
             title: t("maintenance.errorTitle"),
-            message: result.message,
+            message: result.message || "",
             targetName: "",
             action: "",
             oldVal: 0,

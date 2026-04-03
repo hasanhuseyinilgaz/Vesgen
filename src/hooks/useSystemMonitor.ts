@@ -29,8 +29,8 @@ export function useSystemMonitor() {
       if (!isSilent) setLoading(true);
       try {
         const [actRes, healthRes] = await Promise.all([
-          (window as any).electronAPI.dbGetActivity(),
-          (window as any).electronAPI.dbGetServerHealth(),
+          window.electronAPI.dbGetActivity(),
+          window.electronAPI.dbGetServerHealth(),
         ]);
 
         if (actRes?.success) setActivityData(actRes.data || []);

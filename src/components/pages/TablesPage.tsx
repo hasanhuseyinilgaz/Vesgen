@@ -18,14 +18,14 @@ import { cn } from "@/lib/utils";
 import { exportToExcel } from "@/lib/exportUtils";
 import { useTableData } from "@/hooks/useTableData";
 import DataSelectionPanel from "@/components/DataSelectionPanel";
-import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
+import ActivityMonitorRefreshPanel from "@/components/ActivityMonitorRefreshPanel";
 import DataTable from "@/components/DataTable";
 import EmptyState from "@/components/EmptyState";
-import SearchableSidebar from "@/components/SearchableSidebar";
+import SearchableListPanel from "@/components/SearchableListPanel";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
-import CustomTabs from "@/components/CustomTabs";
-import SchemaDiagram from "@/components/SchemaDiagram";
+import CustomTabs from "@/components/ui/custom-tabs";
+import SchemaDiagram from "@/components/schema/SchemaDiagram";
 import { useSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,8 +74,8 @@ export default function TablesPage() {
     handleSort,
     resetState,
   } = useTableData({
-    fetchDataApi: (window as any).electronAPI?.dbGetTableData,
-    fetchColumnsApi: (window as any).electronAPI?.dbGetTableColumns,
+    fetchDataApi: window.electronAPI?.dbGetTableData,
+    fetchColumnsApi: window.electronAPI?.dbGetTableColumns,
   });
 
   const { config, loadConfig } = useSettings();
@@ -100,7 +100,7 @@ export default function TablesPage() {
   const loadTables = async () => {
     setLoading(true);
     try {
-      const result = await (window as any).electronAPI?.dbGetTables();
+      const result = await window.electronAPI?.dbGetTables();
       if (result?.success) setTables(result.data || []);
     } finally {
       setLoading(false);
@@ -110,7 +110,7 @@ export default function TablesPage() {
   const loadSchemaDiagram = async (tableName: string) => {
     setLoading(true);
     try {
-      const relResult = await (window as any).electronAPI.dbGetTableRelations(tableName);
+      const relResult = await window.electronAPI.dbGetTableRelations(tableName);
       if (!relResult?.success) return;
 
       const relations = relResult.data;
@@ -129,8 +129,8 @@ export default function TablesPage() {
       const neighborColumns: Record<string, any[]> = {};
       await Promise.all(
         uniqueNeighbors.map(async (nName) => {
-          const colRes = await (window as any).electronAPI.dbGetTableColumns(nName);
-          neighborColumns[nName] = colRes?.success ? colRes.data : [];
+          const colRes = await window.electronAPI.dbGetTableColumns(nName);
+          neighborColumns[nName] = colRes?.success && colRes.data ? colRes.data : [];
         }),
       );
 
@@ -250,7 +250,7 @@ export default function TablesPage() {
     const identityCol = columns.find((c: any) => c.IS_IDENTITY === 1);
     if (!identityCol) return false;
     try {
-      const result = await (window as any).electronAPI.dbUpdateRecord({
+      const result = await window.electronAPI.dbUpdateRecord({
         tableName: selectedTable,
         idColumn: identityCol.COLUMN_NAME,
         idValue: originalRecord[identityCol.COLUMN_NAME],
@@ -274,7 +274,7 @@ export default function TablesPage() {
   return (
     <PageLayout
       sidebar={
-        <SearchableSidebar
+        <SearchableListPanel
           title={t("tables.title")}
           icon={Database}
           items={tables.map((t) => ({ id: t.TABLE_NAME, label: t.TABLE_NAME }))}
@@ -355,7 +355,7 @@ export default function TablesPage() {
                 />
               </div>
               <div className={cn("mt-0", !showLivePanel && "hidden")}>
-                <LiveMonitoringPanel
+                <ActivityMonitorRefreshPanel
                   onRefresh={() =>
                     loadTableData(
                       selectedTable,
@@ -401,20 +401,21 @@ export default function TablesPage() {
                 )}
               >
                 {activeTab === "data" ? (
-                    <DataTable
-                      data={tableData}
-                      columns={columns.map((c: any) => ({
-                        name: c.COLUMN_NAME,
-                        type: c.DATA_TYPE,
-                        isIdentity: c.IS_IDENTITY === 1,
-                      }))}
-                      title={selectedTable}
-                      sortConfig={sortConfig}
-                      enableUpdate={activeJoins.length === 0}
-                      onSort={handleSort}
-                      onUpdateRecord={handleUpdateRecord}
-                      defaultPageSize={config?.ui?.table?.defaultPageSize}
-                    />
+                  <DataTable
+                    data={tableData}
+                    columns={columns.map((c: any) => ({
+                      name: c.COLUMN_NAME,
+                      type: c.DATA_TYPE,
+                      isIdentity: c.IS_IDENTITY === 1,
+                    }))}
+                    title={selectedTable}
+                    sortConfig={sortConfig}
+                    enableUpdate={activeJoins.length === 0}
+                    persistSettings={activeJoins.length === 0}
+                    onSort={handleSort}
+                    onUpdateRecord={handleUpdateRecord}
+                    defaultPageSize={config?.ui?.table?.defaultPageSize}
+                  />
                 ) : (
                   <div className="h-full flex flex-col">
                     <div className="flex-1 relative border rounded-xl overflow-hidden bg-muted/5">

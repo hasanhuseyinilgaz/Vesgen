@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   fsSaveTenant: (tenant) => ipcRenderer.invoke("fs:saveTenant", tenant),
   fsDeleteTenant: (tenantId) => ipcRenderer.invoke("fs:deleteTenant", tenantId),
 
+  winTestConnection: (config) => ipcRenderer.invoke("win:testConnection", config),
+  winGetPerformanceStats: (config) => ipcRenderer.invoke("win:getPerformanceStats", config),
+  winGetServices: (config) => ipcRenderer.invoke("win:getServices", config),
+
   dbGetFragmentedIndexes: () => ipcRenderer.invoke("db:getFragmentedIndexes"),
   dbFixIndex: (args) => ipcRenderer.invoke("db:fixIndex", args),
   dbGetDbSpaceInfo: () => ipcRenderer.invoke("db:getDbSpaceInfo"),
@@ -61,6 +65,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
   windowMinimize: () => ipcRenderer.send("window:minimize"),
   windowMaximize: () => ipcRenderer.send("window:maximize"),
   windowClose: () => ipcRenderer.send("window:close"),
+
+  // Monitoring Service
+  monitoringStart: (server) => ipcRenderer.invoke("monitoring:start", server),
+  monitoringGetHistory: (serverId, dateStr) => ipcRenderer.invoke("monitoring:getHistory", { serverId, dateStr }),
+  monitoringGetAvailableDates: (serverId) => ipcRenderer.invoke("monitoring:getAvailableDates", serverId),
+  monitoringStop: (serverId) => ipcRenderer.invoke("monitoring:stop", serverId),
+  monitoringUpdateInterval: (serverId, intervalMs) => ipcRenderer.invoke("monitoring:updateInterval", serverId, intervalMs),
+  monitoringGenerateReport: (args) => ipcRenderer.invoke("monitoring:generateReport", args),
+  onMonitoringUpdate: (serverId, callback) => {
+    const channel = `monitoring:update:${serverId}`;
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onMonitoringStatus: (serverId, callback) => {
+    const channel = `monitoring:status:${serverId}`;
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
 
   platform: process.platform,
 });

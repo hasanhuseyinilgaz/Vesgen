@@ -4,7 +4,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { Palette, Check } from "lucide-react";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 export default function ThemeSwitcher() {
   const { t } = useTranslation();

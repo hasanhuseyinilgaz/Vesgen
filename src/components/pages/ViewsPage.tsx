@@ -12,12 +12,12 @@ import { cn } from "@/lib/utils";
 import { exportToExcel } from "@/lib/exportUtils";
 import { useTableData } from "@/hooks/useTableData";
 import DataSelectionPanel from "@/components/DataSelectionPanel";
-import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
+import ActivityMonitorRefreshPanel from "@/components/ActivityMonitorRefreshPanel";
 import DataTable from "@/components/DataTable";
 import SqlCodeViewer from "@/components/SqlCodeViewer";
 import EmptyState from "@/components/EmptyState";
-import SearchableSidebar from "@/components/SearchableSidebar";
-import CustomTabs from "@/components/CustomTabs";
+import SearchableListPanel from "@/components/SearchableListPanel";
+import CustomTabs from "@/components/ui/custom-tabs";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import { useSettings } from "@/hooks/useSettings";
@@ -68,8 +68,8 @@ export default function ViewsPage() {
     handleSort,
     resetState,
   } = useTableData({
-    fetchDataApi: (window as any).electronAPI.dbGetTableData,
-    fetchColumnsApi: (window as any).electronAPI.dbGetTableColumns,
+    fetchDataApi: window.electronAPI.dbGetTableData,
+    fetchColumnsApi: window.electronAPI.dbGetTableColumns,
   });
 
   const { config, loadConfig } = useSettings();
@@ -95,8 +95,8 @@ export default function ViewsPage() {
   const loadViews = async () => {
     setLoading(true);
     try {
-      if ((window as any).electronAPI?.dbGetViews) {
-        const result = await (window as any).electronAPI.dbGetViews();
+      if (window.electronAPI) {
+        const result = await window.electronAPI.dbGetViews();
         if (result?.success) setViews(result.data || []);
       }
     } finally {
@@ -105,8 +105,8 @@ export default function ViewsPage() {
   };
 
   const loadViewDefinition = async (viewName: string) => {
-    if ((window as any).electronAPI?.dbGetViewDefinition) {
-      const defResult = await (window as any).electronAPI.dbGetViewDefinition(
+    if (window.electronAPI) {
+      const defResult = await window.electronAPI.dbGetViewDefinition(
         viewName,
       );
       if (defResult?.success) setViewDefinition(defResult.data || "");
@@ -134,7 +134,7 @@ export default function ViewsPage() {
   return (
     <PageLayout
       sidebar={
-        <SearchableSidebar
+        <SearchableListPanel
           title={t("views.title")}
           icon={Code}
           items={views.map((v) => ({ id: v.TABLE_NAME, label: v.TABLE_NAME }))}
@@ -156,18 +156,6 @@ export default function ViewsPage() {
             title={t("views.pageTitle")}
             icon={Code}
             description={t("views.pageDescription")}
-            badges={selectedView ? [
-              {
-                label: t("views.activeView"),
-                value: selectedView,
-              },
-              {
-                label: "MODE",
-                value: activeTab === "data"
-                  ? `${tableData.length} ${t("components.dataToolbar.records").toUpperCase()}`
-                  : t("views.tabCode").toUpperCase(),
-              },
-            ] : undefined}
             recordCount={selectedView ? tableData.length : undefined}
             topRows={topRows}
             onTopRowsChange={selectedView ? (val) => {
@@ -215,7 +203,7 @@ export default function ViewsPage() {
                 />
               </div>
               <div className={cn("mt-0", !showLivePanel && "hidden")}>
-                <LiveMonitoringPanel
+                <ActivityMonitorRefreshPanel
                   onRefresh={() =>
                     loadTableData(
                       selectedView,

@@ -1,6 +1,7 @@
 configs/
 queries/
 release/
+monitoring/
 
 .env
 .env.local
@@ -36,5 +37,4 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# Vite dev server port (generated at runtime)
-electron/dev-port
+electron/dev-port

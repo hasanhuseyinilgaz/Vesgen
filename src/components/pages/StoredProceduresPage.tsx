@@ -30,15 +30,15 @@ import { cn } from "@/lib/utils";
 import { exportToExcel } from "@/lib/exportUtils";
 import { isDangerousOperation, mapSqlType } from "@/lib/sqlUtils";
 
-import DataTable, { SortDirection, SortConfig } from "@/components/DataTable";
+import DataTable, { SortConfig } from "@/components/DataTable";
 import SqlCodeViewer from "@/components/SqlCodeViewer";
 import EmptyState from "@/components/EmptyState";
-import SearchableSidebar from "@/components/SearchableSidebar";
-import CustomTabs from "@/components/CustomTabs";
+import SearchableListPanel from "@/components/SearchableListPanel";
+import CustomTabs from "@/components/ui/custom-tabs";
 import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import { useSettings } from "@/hooks/useSettings";
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 export interface StoredProcedure {
   ROUTINE_NAME: string;
@@ -84,8 +84,8 @@ export default function StoredProceduresPage() {
   const loadProcedures = async () => {
     setLoading(true);
     try {
-      if ((window as any).electronAPI?.dbGetStoredProcedures) {
-        const res = await (window as any).electronAPI.dbGetStoredProcedures();
+      if (window.electronAPI) {
+        const res = await window.electronAPI.dbGetStoredProcedures();
         if (res?.success) setProcedures(res.data || []);
       }
     } finally {
@@ -95,9 +95,9 @@ export default function StoredProceduresPage() {
 
   const loadPresets = async () => {
     try {
-      if ((window as any).electronAPI?.fsReadPresets) {
-        const res = await (window as any).electronAPI.fsReadPresets();
-        if (res?.success) setPresets(res.data);
+      if (window.electronAPI) {
+        const res = await window.electronAPI.fsReadPresets();
+        if (res?.success) setPresets(res.data || []);
       }
     } catch (e) {
       console.error(e);
@@ -117,8 +117,8 @@ export default function StoredProceduresPage() {
     );
 
     try {
-      if ((window as any).electronAPI?.dbGetSPParameters) {
-        const res = await (window as any).electronAPI.dbGetSPParameters(spName);
+      if (window.electronAPI) {
+        const res = await window.electronAPI.dbGetSPParameters(spName);
         if (res?.success && res.data) {
           setParameters(res.data);
 
@@ -168,7 +168,7 @@ export default function StoredProceduresPage() {
     }));
 
     try {
-      const execRes = await (window as any).electronAPI.dbExecuteSP({
+      const execRes = await window.electronAPI.dbExecuteSP({
         spName: selectedSP,
         parameters: params,
       });
@@ -215,8 +215,8 @@ export default function StoredProceduresPage() {
 
       setPresets(updatedPresets);
 
-      if ((window as any).electronAPI?.fsSavePresets) {
-        const res = await (window as any).electronAPI.fsSavePresets(updatedPresets);
+      if (window.electronAPI) {
+        const res = await window.electronAPI.fsSavePresets(updatedPresets);
         if (res?.success) {
           toast.success(t("procedures.saveSuccess") || "Parametreler başarıyla kaydedildi!");
         } else {
@@ -243,9 +243,9 @@ export default function StoredProceduresPage() {
       });
       setParamValues(clearedValues);
 
-      if ((window as any).electronAPI?.fsSavePresets) {
+      if (window.electronAPI) {
         const res =
-          await (window as any).electronAPI.fsSavePresets(updatedPresets);
+          await window.electronAPI.fsSavePresets(updatedPresets);
         if (res?.success) {
           toast.success(
             t("procedures.deleteSuccess") || "Kayıtlı parametreler silindi.",
@@ -285,7 +285,7 @@ export default function StoredProceduresPage() {
   return (
     <PageLayout
       sidebar={
-        <SearchableSidebar
+        <SearchableListPanel
           title={t("procedures.title")}
           icon={Settings}
           items={procedures.map((p) => ({

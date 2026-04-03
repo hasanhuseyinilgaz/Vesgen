@@ -32,7 +32,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import CustomTabs from "@/components/CustomTabs";
+import CustomTabs from "@/components/ui/custom-tabs";
 import PageHeader from "@/components/PageHeader";
 import {
   Select,
@@ -49,7 +49,7 @@ import {
   JobSchedule,
 } from "@/hooks/useSqlJobs";
 
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
 const formatSqlDate = (d?: number, t?: number) => {
   if (!d) return "-";

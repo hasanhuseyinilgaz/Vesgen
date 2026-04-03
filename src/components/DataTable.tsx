@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import PasswordModal from "@/components/PasswordModal";
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 import ColumnManager from "@/components/ColumnManager";
 import {
   Select,
@@ -37,6 +37,97 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search as SearchIcon } from "lucide-react";
+import { isDateColumn, formatToDatetimeLocal, safeStringify, isLongTextField } from "@/lib/tableUtils";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+interface SortableHeaderProps {
+  col: DataTableColumn;
+  onSort?: (column: string, direction: SortDirection) => void;
+  sortConfig?: SortConfig | null;
+  t: (key: string) => string;
+}
+
+function SortableHeader({ col, onSort, sortConfig, t }: SortableHeaderProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: col.name });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    zIndex: isDragging ? 100 : "auto",
+    opacity: isDragging ? 0.8 : 1,
+  };
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "px-4 py-3 font-semibold border-b whitespace-nowrap text-foreground transition-colors select-none group/header",
+        onSort && "cursor-pointer hover:bg-muted/80",
+        isDragging && "bg-muted shadow-lg"
+      )}
+    >
+      <div className="flex items-center space-x-1.5 h-full">
+         <div 
+          {...attributes} 
+          {...listeners} 
+          className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-primary/10 rounded transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ArrowUpDown className="w-3 h-3 text-muted-foreground/30 group-hover/header:text-primary/50 transition-colors" />
+        </div>
+        
+        <ActionTooltip label={t("components.dataTable.clickToSort")} side="top">
+          <div 
+            className="flex items-center space-x-1 flex-1"
+            onClick={() => onSort?.(col.name, sortConfig?.column === col.name && sortConfig.direction === "ASC" ? "DESC" : "ASC")}
+          >
+            <span>{col.name}</span>
+            {onSort && (
+              <div className="flex items-center min-w-[16px]">
+                {sortConfig?.column === col.name ? (
+                  sortConfig.direction === "ASC" ? (
+                    <ChevronUp className="w-4 h-4 text-primary" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-primary" />
+                  )
+                ) : null}
+              </div>
+            )}
+            {col.type && (
+              <span className="text-[10px] font-normal text-muted-foreground/50 ml-1 uppercase tracking-wider">
+                ({col.type})
+              </span>
+            )}
+          </div>
+        </ActionTooltip>
+      </div>
+    </th>
+  );
+}
 
 export interface DataTableColumn {
   name: string;
@@ -64,50 +155,10 @@ interface DataTableProps {
   ) => Promise<boolean>;
   enableUpdate?: boolean;
   defaultPageSize?: number;
+  persistSettings?: boolean;
 }
 
-const isDateColumn = (type?: string) => {
-  if (!type) return false;
-  const t = type.toLowerCase();
-  return t.includes("date") || t.includes("time");
-};
 
-const formatToDatetimeLocal = (val: any) => {
-  if (!val) return "";
-  const d = new Date(val);
-  if (isNaN(d.getTime())) return val.toString();
-
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-    d.getDate(),
-  )}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
-const safeStringify = (obj: any) => {
-  try {
-    return JSON.stringify(obj, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    );
-  } catch (e) {
-    console.error("Stringify error:", e);
-    return "";
-  }
-};
-const isLongTextField = (name: string, type?: string, value?: string) => {
-  const n = name.toLowerCase();
-  const t = type?.toLowerCase() || "";
-  return (
-    t.includes("max") ||
-    t.includes("text") ||
-    t.includes("xml") ||
-    n.includes("sql") ||
-    n.includes("desc") ||
-    n.includes("comment") ||
-    n.includes("note") ||
-    n.includes("query") ||
-    (value && value.length > 50) ||
-    (value && value.includes("\n"))
-  );
-};
 
 export default function DataTable({
   data = [],
@@ -118,9 +169,30 @@ export default function DataTable({
   onSort,
   onUpdateRecord,
   enableUpdate = false,
+  persistSettings = true,
   defaultPageSize = 20,
 }: DataTableProps) {
   const { t } = useTranslation();
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = columnOrder.indexOf(active.id as string);
+      const newIndex = columnOrder.indexOf(over.id as string);
+      const newOrder = arrayMove(columnOrder, oldIndex, newIndex);
+      handleOrderChange(newOrder);
+    }
+  };
   const safeData = Array.isArray(data) ? data : [];
   const safeColumns = Array.isArray(columns) ? columns : [];
 
@@ -162,35 +234,61 @@ export default function DataTable({
   useEffect(() => {
     if (!title || safeColumns.length === 0) return;
 
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
+    const currentColumnNames = safeColumns.map((c) => c.name);
+    let finalOrder: string[] = [];
+    let finalVisible: Record<string, boolean> = {};
+
+    const saved = persistSettings ? localStorage.getItem(storageKey) : null;
+    
+    if (saved && persistSettings) {
       try {
         const { visible, order } = JSON.parse(saved);
-        if (visible) setVisibleColumns(visible);
-        if (order) setColumnOrder(order);
+        
+        // 1. Mevcut dizilimden silinen sütunları ayıkla
+        const existingOrder = (order || []).filter((name: string) =>
+          currentColumnNames.includes(name)
+        );
+        
+        // 2. Yeni eklenen (JOIN gibi) sütunları bul
+        const newCols = currentColumnNames.filter(
+          (name) => !existingOrder.includes(name)
+        );
+        
+        // 3. Mevcut dizilimi koru, yeni sütunları sona ekle
+        finalOrder = [...existingOrder, ...newCols];
+        
+        // 4. Görünürlük ayarlarını birleştir (yeniler varsayılan olarak TRUE)
+        finalVisible = { ...(visible || {}) };
+        newCols.forEach((col) => {
+          if (finalVisible[col] === undefined) {
+             finalVisible[col] = true;
+          }
+        });
       } catch (e) {
         console.error("Failed to load table settings:", e);
       }
-    } else {
-      // Default initialization
-      const initialOrder = safeColumns.map((c) => c.name);
-      setColumnOrder(initialOrder);
-
-      const initialVisible: Record<string, boolean> = {};
-      initialOrder.forEach((col) => {
-        initialVisible[col] = true;
-      });
-      setVisibleColumns(initialVisible);
     }
 
-    // Satır seçimlerini ve sayfayı da sıfırla
+    if (finalOrder.length === 0) {
+      // Varsayılan ilk yükleme (veya JOIN durumu)
+      finalOrder = currentColumnNames;
+      currentColumnNames.forEach((col) => {
+        finalVisible[col] = true;
+      });
+    }
+
+    setColumnOrder(finalOrder);
+    setVisibleColumns(finalVisible);
+
+    // Sayfayı ve seçimleri sıfırla
     setCurrentPage(1);
     setSelectedRowData(null);
     setEditData(null);
-  }, [title, storageKey, safeColumns]);
+  }, [title, storageKey, safeColumns, persistSettings]);
 
   // Save Persistence
   const saveSettings = (visible: Record<string, boolean>, order: string[]) => {
+    if (!persistSettings) return;
     localStorage.setItem(
       storageKey,
       JSON.stringify({ visible, order })
@@ -278,14 +376,6 @@ export default function DataTable({
   );
 
 
-  const handleSortClick = (columnName: string) => {
-    if (!onSort) return;
-    let newDirection: SortDirection = "ASC";
-    if (sortConfig?.column === columnName && sortConfig.direction === "ASC") {
-      newDirection = "DESC";
-    }
-    onSort(columnName, newDirection);
-  };
 
   const openRowDetail = (row: any) => {
     const normalizedRow = { ...row };
@@ -348,7 +438,7 @@ export default function DataTable({
 
   const handleSaveInitiate = async () => {
     try {
-      const res = await (window as any).electronAPI.configGet();
+      const res = await window.electronAPI.configGet();
       const requiresAuth =
         res?.data?.security?.requirePasswordFor?.updateRecord;
 
@@ -430,47 +520,30 @@ export default function DataTable({
 
       <div className="w-full overflow-x-auto relative">
         <table className="min-w-full text-sm text-left border-collapse">
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-muted border-b">
-              <th className="w-10 px-4 py-3 border-b"></th>
-              {finalColumns.map((col) => (
-                <th
-                  key={col.name}
-                  onClick={() => handleSortClick(col.name)}
-                  className={cn(
-                    "px-4 py-3 font-semibold border-b whitespace-nowrap text-foreground transition-colors select-none",
-                    onSort && "cursor-pointer hover:bg-muted/80",
-                  )}
+          <thead className="sticky top-0 z-20">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <tr className="bg-muted border-b">
+                <th className="w-10 px-4 py-3 border-b bg-muted sticky left-0 z-30 shadow-[1px_0_0_0_rgba(0,0,0,0.1)]"></th>
+                <SortableContext 
+                  items={finalColumns.map(c => c.name)} 
+                  strategy={horizontalListSortingStrategy}
                 >
-                  <ActionTooltip
-                    label={t("components.dataTable.clickToSort")}
-                    side="top"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>{col.name}</span>
-                      {onSort && (
-                        <div className="flex items-center">
-                          {sortConfig?.column === col.name ? (
-                            sortConfig.direction === "ASC" ? (
-                              <ChevronUp className="w-4 h-4 text-primary" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4 text-primary" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="w-3 h-3 text-muted-foreground/30" />
-                          )}
-                        </div>
-                      )}
-                      {col.type && (
-                        <span className="text-[10px] font-normal text-muted-foreground ml-1.5 uppercase tracking-wider">
-                          ({col.type})
-                        </span>
-                      )}
-                    </div>
-                  </ActionTooltip>
-                </th>
-              ))}
-            </tr>
+                  {finalColumns.map((col) => (
+                    <SortableHeader 
+                      key={col.name} 
+                      col={col} 
+                      onSort={onSort} 
+                      sortConfig={sortConfig} 
+                      t={t} 
+                    />
+                  ))}
+                </SortableContext>
+              </tr>
+            </DndContext>
           </thead>
 
           <tbody className="divide-y divide-border/50">
@@ -499,18 +572,18 @@ export default function DataTable({
                   >
                     <td
                       className={cn(
-                        "px-4 py-2 border-b text-muted-foreground/50 transition-colors",
+                        "px-4 py-2 border-b text-muted-foreground/50 transition-colors sticky left-0 z-10",
                         isHighlighted
-                          ? "bg-transparent text-info font-bold"
-                          : "group-hover:text-primary bg-card/50",
+                          ? "bg-info/10 text-info font-bold"
+                          : "group-hover:text-primary bg-card/50 shadow-[1px_0_0_0_rgba(0,0,0,0.1)]",
                       )}
                       onClick={() => openRowDetail(row)}
                     >
                       <ActionTooltip
-                        label={t("components.dataTable.viewDetail")}
+                        label={enableUpdate ? t("components.dataTable.viewAndEdit") : t("components.dataTable.viewOnly")}
                         side="right"
                       >
-                        <Maximize2 className="w-3.5 h-3.5" />
+                        <Maximize2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
                       </ActionTooltip>
                     </td>
                     {finalColumns.map((col) => {
@@ -543,9 +616,16 @@ export default function DataTable({
                                 ? "text-info font-medium"
                                 : "text-foreground/90",
                           )}
-                          onClick={() => openRowDetail(row)}
+                           onClick={() => openRowDetail(row)}
                         >
-                          {displayValue}
+                           <ActionTooltip
+                            label={enableUpdate ? t("components.dataTable.viewAndEdit") : t("components.dataTable.viewOnly")}
+                            side="top"
+                          >
+                            <div className="w-full h-full truncate">
+                              {displayValue}
+                            </div>
+                          </ActionTooltip>
                         </td>
                       );
                     })}

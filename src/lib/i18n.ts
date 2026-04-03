@@ -1,7 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import tr from "./locales/tr.json";
-import en from "./locales/en.json";
+import tr from "@/locales/tr.json";
+import en from "@/locales/en.json";
 
 const savedLanguage = localStorage.getItem("appLanguage") || "en";
 

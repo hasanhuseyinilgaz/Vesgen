@@ -18,7 +18,7 @@ export function useSettings() {
   const loadConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await (window as any).electronAPI.configGet();
+      const res = await window.electronAPI.configGet();
       if (res?.success) {
         originalConfigRef.current = JSON.parse(JSON.stringify(res.data));
         setConfig(res.data);
@@ -42,7 +42,7 @@ export function useSettings() {
 
     setSaving(true);
     try {
-      const res = await (window as any).electronAPI.configSet(config);
+      const res = await window.electronAPI.configSet(config);
       if (res?.success) {
         originalConfigRef.current = JSON.parse(JSON.stringify(config));
         showMessage(t("settings.saveSuccess"), "success");

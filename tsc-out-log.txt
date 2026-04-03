@@ -1,0 +1,31 @@
+src/components/pages/DatabaseMaintenancePage.tsx(118,49): error TS2339: Property 'newFragmentation' does not exist on type 'IPCResponse<any>'.
+src/components/pages/DatabaseMaintenancePage.tsx(122,22): error TS2339: Property 'newHealthScore' does not exist on type 'IPCResponse<any>'.
+src/components/pages/DatabaseMaintenancePage.tsx(123,40): error TS2339: Property 'newHealthScore' does not exist on type 'IPCResponse<any>'.
+src/components/pages/DatabaseMaintenancePage.tsx(129,13): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/pages/DatabaseMaintenancePage.tsx(132,22): error TS2339: Property 'action' does not exist on type 'IPCResponse<any>'.
+src/components/pages/DatabaseMaintenancePage.tsx(136,28): error TS2339: Property 'newFragmentation' does not exist on type 'IPCResponse<any>'.
+src/components/pages/DatabaseMaintenancePage.tsx(143,13): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/pages/DatabaseMaintenancePage.tsx(178,11): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/components/pages/QueriesPage.tsx(395,32): error TS2551: Property 'messages' does not exist on type 'IPCResponse<any>'. Did you mean 'message'?
+src/components/pages/QueriesPage.tsx(397,24): error TS2551: Property 'messages' does not exist on type 'IPCResponse<any>'. Did you mean 'message'?
+src/components/pages/QueriesPage.tsx(397,47): error TS2551: Property 'messages' does not exist on type 'IPCResponse<any>'. Did you mean 'message'?
+src/components/pages/QueriesPage.tsx(420,44): error TS2339: Property 'fsSaveQuery' does not exist on type 'ElectronAPI'.
+src/components/pages/QueriesPage.tsx(455,44): error TS2339: Property 'fsSaveQuery' does not exist on type 'ElectronAPI'.
+src/components/pages/TablesPage.tsx(133,11): error TS2322: Type 'Column[] | undefined' is not assignable to type 'any[]'.
+  Type 'undefined' is not assignable to type 'any[]'.
+src/components/pages/TablesPage.tsx(253,47): error TS2339: Property 'dbUpdateRecord' does not exist on type 'ElectronAPI'.
+src/components/ui/command.tsx(4,1): error TS6133: 'DialogProps' is declared but its value is never read.
+src/components/ui/command.tsx(8,1): error TS6192: All imports in import declaration are unused.
+src/hooks/useDatabase.ts(47,17): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/hooks/useDatabaseMaintenance.ts(92,25): error TS18048: 'result.data' is possibly 'undefined'.
+src/hooks/useDatabaseMaintenance.ts(92,37): error TS2339: Property 'stats' does not exist on type 'any[]'.
+src/hooks/useDatabaseMaintenance.ts(93,31): error TS18048: 'result.data' is possibly 'undefined'.
+src/hooks/useDatabaseMaintenance.ts(93,43): error TS2339: Property 'healthScore' does not exist on type 'any[]'.
+src/hooks/useSystemMonitor.ts(38,42): error TS2339: Property 'cpu' does not exist on type 'IPCResponse<any>'.
+src/hooks/useSystemMonitor.ts(38,64): error TS2339: Property 'disks' does not exist on type 'IPCResponse<any>'.
+src/hooks/useWinServer.ts(90,49): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.

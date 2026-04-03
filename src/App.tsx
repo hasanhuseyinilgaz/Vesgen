@@ -7,9 +7,9 @@ import {
 import { useState } from "react";
 
 import TenantsPage from "./components/pages/TenantsPage";
-import Dashboard from "./components/Dashboard";
+import AppLayout from "./components/layout/AppLayout";
 import { ThemeProvider } from "./components/ThemeProvider";
-import Titlebar from "./components/Titlebar";
+import TitleBar from "./components/layout/TitleBar";
 import { APP_INFO } from "./lib/constants";
 import { useEffect } from "react";
 import { Toaster } from "sonner";
@@ -20,16 +20,16 @@ function App() {
   useEffect(() => {
     const updateCSSVariables = async () => {
       try {
-        if (!(window as any).electronAPI?.configGet) {
+        if (!window.electronAPI) {
           console.warn("Electron API not yet available");
           return;
         }
-        const config = await (window as any).electronAPI.configGet();
+        const config = await window.electronAPI.configGet();
         const vibrancy = config?.data?.visuals?.vibrancy ?? 1.0;
         const glassOpacity = config?.data?.visuals?.glassOpacity ?? 0.05;
 
         // Sadece Ayarlar sayfasında değilsek senkronize et (SettingsPage zaten canlı güncelliyor)
-        if (!window.location.hash.includes("/settings")) {
+        if (!window.location.pathname.includes("/settings")) {
           document.documentElement.style.setProperty("--vibrancy", vibrancy.toString());
           document.documentElement.style.setProperty("--glass-opacity", glassOpacity.toString());
         }
@@ -64,7 +64,7 @@ function App() {
           swipeDirections={["right"]}
           toastOptions={{ duration: 3500 }}
         />
-        <Titlebar />
+        <TitleBar />
         <div className="flex-1 relative overflow-hidden">
           <Router>
             <Routes>
@@ -74,15 +74,15 @@ function App() {
                   !activeTenantId ? (
                     <TenantsPage onSelectTenant={handleTenantSelect} />
                   ) : (
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to="/overview" replace />
                   )
                 }
               />
               <Route
-                path="/dashboard/*"
+                path="/*"
                 element={
                   activeTenantId ? (
-                    <Dashboard
+                    <AppLayout
                       activeTenantId={activeTenantId}
                       onDisconnect={handleDisconnect}
                     />
@@ -91,7 +91,6 @@ function App() {
                   )
                 }
               />
-              <Route path="/login" element={<Navigate to="/" replace />} />
             </Routes>
           </Router>
         </div>

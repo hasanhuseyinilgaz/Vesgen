@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import Editor, { OnMount, useMonaco } from "@monaco-editor/react";
 import { useTheme } from "@/components/ThemeProvider";
-import { getThemeColorHex } from "@/lib/utils";
+import { getThemeColorHex } from "@/lib/colorUtils";
 
 interface SqlCodeViewerProps {
   code: string;

@@ -8,7 +8,7 @@ import { useSystemMonitor } from "@/hooks/useSystemMonitor";
 
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
-import LiveMonitoringPanel from "@/components/LiveMonitoringPanel";
+import ActivityMonitorRefreshPanel from "@/components/ActivityMonitorRefreshPanel";
 import PageLayout from "@/components/PageLayout";
 
 export default function ActivityMonitorPage() {
@@ -62,7 +62,7 @@ export default function ActivityMonitorPage() {
               !showLivePanel && "hidden",
             )}
           >
-            <LiveMonitoringPanel
+            <ActivityMonitorRefreshPanel
               onRefresh={handleLiveRefresh}
               onStatusChange={setIsLiveActive}
             />

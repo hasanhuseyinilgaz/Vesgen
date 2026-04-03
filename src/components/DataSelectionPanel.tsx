@@ -36,31 +36,10 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
+import { buildWhereClause } from "@/lib/sqlUtils";
+import { FilterColumn, FilterRule, JoinRule } from "@/types";
 
-export interface FilterColumn {
-  COLUMN_NAME: string;
-  DATA_TYPE: string;
-  tableName?: string;
-  originalName?: string;
-}
-
-export interface FilterRule {
-  id: string;
-  logicalOperator: "AND" | "OR";
-  column: string;
-  operator: string;
-  value: string;
-  value2?: string;
-}
-
-export interface JoinRule {
-  id: string;
-  type?: string;
-  targetTable: string;
-  localColumn: string;
-  targetColumn: string;
-}
 
 interface DataSelectionPanelProps {
   tableName: string;
@@ -187,40 +166,7 @@ export default function DataSelectionPanel({
       return;
     }
 
-    const finalWhereClause = validRules
-      .map((rule, idx) => {
-        const colMeta = columns.find((c) => c.COLUMN_NAME === rule.column);
-        const isString =
-          colMeta?.DATA_TYPE.includes("char") ||
-          colMeta?.DATA_TYPE.includes("text") ||
-          colMeta?.DATA_TYPE.includes("date") ||
-          colMeta?.DATA_TYPE.includes("time");
-
-        const formatValue = (val: string) =>
-          isString ? `'${val.replace(/'/g, "''")}'` : val;
-
-        const tablePrefix = validJoins.length > 0 && colMeta?.tableName ? `[${colMeta.tableName}].` : "";
-        const colName = colMeta?.originalName || rule.column;
-        let condition = "";
-
-        if (rule.operator === "BETWEEN" && rule.value2) {
-          condition = `${tablePrefix}[${colName}] BETWEEN ${formatValue(rule.value)} AND ${formatValue(rule.value2)}`;
-        } else if (rule.operator === "LIKE") {
-          condition = `${tablePrefix}[${colName}] LIKE '%${rule.value.replace(/'/g, "''")}%'`;
-        } else if (rule.operator === "IN") {
-          const inValues = rule.value
-            .split(",")
-            .map((v) => formatValue(v.trim()))
-            .join(",");
-          condition = `${tablePrefix}[${colName}] IN (${inValues})`;
-        } else {
-          condition = `${tablePrefix}[${colName}] ${rule.operator} ${formatValue(rule.value)}`;
-        }
-
-        if (idx === 0) return condition;
-        return `${rule.logicalOperator} ${condition}`;
-      })
-      .join(" ");
+    const finalWhereClause = buildWhereClause(validRules, columns, validJoins);
 
     onApplyFilter(finalWhereClause, validJoins);
   };
@@ -239,13 +185,13 @@ export default function DataSelectionPanel({
     if (joinTargetColumns[targetTable]) return;
 
     try {
-      const res = await (window as any).electronAPI.dbGetTableColumns(
+      const res = await window.electronAPI.dbGetTableColumns(
         targetTable,
       );
       if (res.success) {
         setJoinTargetColumns((prev) => ({
           ...prev,
-          [targetTable]: res.data,
+          [targetTable]: (res.data || []) as FilterColumn[],
         }));
       }
     } catch (e) {

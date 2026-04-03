@@ -20,6 +20,9 @@
   "author": "lizoco",
   "license": "MIT",
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -45,7 +48,9 @@
     "react-dom": "^18.2.0",
     "react-i18next": "^16.5.4",
     "react-router-dom": "^6.20.0",
+    "recharts": "^3.8.0",
     "sonner": "^2.0.7",
+    "ssh2": "^1.17.0",
     "tailwind-merge": "^2.6.1",
     "xlsx": "^0.18.5"
   },
@@ -55,6 +60,7 @@
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
+    "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",

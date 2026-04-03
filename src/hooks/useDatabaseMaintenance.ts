@@ -46,7 +46,7 @@ export function useDatabaseMaintenance() {
   const loadFragmentedIndexes = useCallback(async () => {
     setLoadingIndexes(true);
     try {
-      if ((window as any).electronAPI?.dbGetFragmentedIndexes) {
+      if (window.electronAPI) {
         const result = await (
           window as any
         ).electronAPI.dbGetFragmentedIndexes();
@@ -67,8 +67,8 @@ export function useDatabaseMaintenance() {
     setLoadingDisk(true);
     setDiskError(null);
     try {
-      if ((window as any).electronAPI?.dbGetDbSpaceInfo) {
-        const result = await (window as any).electronAPI.dbGetDbSpaceInfo();
+      if (window.electronAPI) {
+        const result = await window.electronAPI.dbGetDbSpaceInfo();
         if (result?.success) {
           setDbFiles(result.data.files || []);
           setTopTables(result.data.topTables || []);
@@ -86,8 +86,8 @@ export function useDatabaseMaintenance() {
   const loadStatisticsInfo = useCallback(async () => {
     setLoadingStats(true);
     try {
-      if ((window as any).electronAPI?.dbGetStatisticsInfo) {
-        const result = await (window as any).electronAPI.dbGetStatisticsInfo();
+      if (window.electronAPI) {
+        const result = await window.electronAPI.dbGetStatisticsInfo();
         if (result?.success) {
           setTableStats(result.data.stats || []);
           setStatsHealthScore(result.data.healthScore ?? 100);

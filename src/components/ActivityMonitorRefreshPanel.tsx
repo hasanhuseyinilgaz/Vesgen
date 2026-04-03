@@ -11,19 +11,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import ActionTooltip from "@/components/ActionTooltip";
+import ActionTooltip from "@/components/ui/action-tooltip";
 
-interface LiveMonitoringPanelProps {
+interface ActivityMonitorRefreshPanelProps {
   onRefresh: () => void;
   onStatusChange: (isActive: boolean) => void;
   onAutoSort?: () => void;
 }
 
-export default function LiveMonitoringPanel({
+export default function ActivityMonitorRefreshPanel({
   onRefresh,
   onStatusChange,
   onAutoSort,
-}: LiveMonitoringPanelProps) {
+}: ActivityMonitorRefreshPanelProps) {
   const { t } = useTranslation();
   const [isLiveActive, setIsLiveActive] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState("5");

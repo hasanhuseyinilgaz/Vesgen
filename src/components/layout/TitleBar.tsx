@@ -1,19 +1,19 @@
 import { Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { APP_INFO } from "../lib/constants";
+import { APP_INFO } from "@/lib/constants";
 
-export default function Titlebar() {
+export default function TitleBar() {
   const [isElectron, setIsElectron] = useState(false);
   const [platform, setPlatform] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && (window as any).electronAPI) {
+    if (typeof window !== "undefined" && window.electronAPI) {
       setIsElectron(true);
-      if ((window as any).electronAPI.platform) {
-        setPlatform((window as any).electronAPI.platform);
+      if (window.electronAPI) {
+        setPlatform(window.electronAPI.platform);
       }
     } else {
-      console.warn("Titlebar: electronAPI not found on window object");
+      console.warn("Titlebar: ElectronAPI not found on window object");
     }
   }, []);
 
@@ -24,15 +24,15 @@ export default function Titlebar() {
   const isMac = platform === "darwin";
 
   const handleMinimize = () => {
-    (window as any).electronAPI?.windowMinimize();
+    window.electronAPI?.windowMinimize();
   };
 
   const handleMaximize = () => {
-    (window as any).electronAPI?.windowMaximize();
+    window.electronAPI?.windowMaximize();
   };
 
   const handleClose = () => {
-    (window as any).electronAPI?.windowClose();
+    window.electronAPI?.windowClose();
   };
 
   return (
