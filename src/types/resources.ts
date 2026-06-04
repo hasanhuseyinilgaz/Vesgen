@@ -5,6 +5,7 @@ export interface DatabaseResource {
   user: string;
   password?: string;
   databaseName?: string; // Bazı yerlerde kullanılıyor
+  excludeFromMonitoring?: boolean;
 }
 
 export interface WindowsServerResource {
@@ -15,6 +16,7 @@ export interface WindowsServerResource {
   user?: string; // Legacy
   username: string;
   password?: string;
+  excludeFromMonitoring?: boolean;
 }
 
 export interface LinuxServerResource {
@@ -23,6 +25,7 @@ export interface LinuxServerResource {
   host: string;
   user: string;
   privateKeyPath?: string;
+  excludeFromMonitoring?: boolean;
 }
 
 export interface Tenant {

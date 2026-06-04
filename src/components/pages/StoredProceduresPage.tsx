@@ -39,6 +39,8 @@ import PageHeader from "@/components/PageHeader";
 import PageLayout from "@/components/PageLayout";
 import { useSettings } from "@/hooks/useSettings";
 import ActionTooltip from "@/components/ui/action-tooltip";
+import { useDatabaseContext } from "@/contexts/DatabaseContext";
+import ConnectionRequired from "@/components/ConnectionRequired";
 
 export interface StoredProcedure {
   ROUTINE_NAME: string;
@@ -55,6 +57,7 @@ export interface Preset {
 
 export default function StoredProceduresPage() {
   const { t } = useTranslation();
+  const { isDbConnected } = useDatabaseContext();
   const [procedures, setProcedures] = useState<StoredProcedure[]>([]);
   const [selectedSP, setSelectedSP] = useState<string | null>(null);
   const [spDefinition, setSpDefinition] = useState<string>("");
@@ -76,10 +79,12 @@ export default function StoredProceduresPage() {
   const { config, loadConfig } = useSettings();
 
   useEffect(() => {
-    loadProcedures();
-    loadPresets();
-    loadConfig();
-  }, [loadConfig]);
+    if (isDbConnected) {
+      loadProcedures();
+      loadPresets();
+      loadConfig();
+    }
+  }, [loadConfig, isDbConnected]);
 
   const loadProcedures = async () => {
     setLoading(true);
@@ -281,6 +286,27 @@ export default function StoredProceduresPage() {
     if (!result?.data?.length) return;
     exportToExcel(result.data, `SP_${selectedSP}`);
   };
+
+  if (!isDbConnected) {
+    return (
+      <PageLayout
+        sidebar={
+          <SearchableListPanel
+            title={t("procedures.title")}
+            icon={Settings}
+            items={[]}
+            selectedItemId={null}
+            onSelect={() => {}}
+            onRefresh={() => {}}
+            loading={false}
+            description={t("common.noConnection", "Bağlantı Yok")}
+          />
+        }
+      >
+        <ConnectionRequired />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout

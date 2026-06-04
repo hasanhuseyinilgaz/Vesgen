@@ -59,6 +59,8 @@
     "fillAllFields": "Lütfen tüm bağlantı bilgilerini doldurun.",
     "testConnection": "Test Et",
     "saveAndConnect": "Kaydet ve Bağla",
+    "excludeFromMonitoring": "Periyodik Kontrollerden Hariç Tut",
+    "excludeFromMonitoringDesc": "VPN gerektiren durumlar için arka plan kontrollerini kapatır.",
     "update": "Güncelle",
     "editDbTitle": "Veritabanı Ayarları",
     "editDbDesc": "Seçili veritabanı bilgilerini güncelleyin veya bağlantıyı sistemden kaldırın.",
@@ -76,8 +78,8 @@
     "tabDatabases": "Veritabanları",
     "tabServers": "Sunucular",
     "systemOverview": "Sistem Özeti",
-    "welcomeBack": "Tekrar Hoş Geldin",
-    "overviewDescription": "Tüm kaynaklarınızın (veritabanı, sunucu, performans) anlık durumu ve sağlığı tek bir panelde toplandı.",
+    "activeEnvSummary": "Aktif Ortam Özeti",
+    "overviewDescription": "Bu ortamdaki kaynakların (veritabanı, sunucu, performans) anlık durum ve sağlık verileri.",
     "databases": "Veritabanları",
     "servers": "Sunucular",
     "quickActions": "Hızlı İşlemler",
@@ -96,7 +98,35 @@
     "performanceOptimal": "Performans Optimal",
     "performanceDesc": "Kaynak kullanımı ve yanıt süreleri beklenen aralıkta.",
     "sustainability": "Sürdürülebilirlik",
-    "sustainabilityDesc": "Gelecekteki yük artışları için sistem kapasitesi yeterli."
+    "sustainabilityDesc": "Gelecekteki yük artışları için sistem kapasitesi yeterli.",
+    "fleetHealth": "Kaynak Sağlığı",
+    "lastSync": "Son Senkronizasyon",
+    "allSystemsOperational": "Tüm Sistemler Çalışıyor",
+    "partialOutage": "Kısmi Kesinti",
+    "systemDown": "Sistem Kapalı",
+    "monitoringActive": "Canlı İzleme Aktif",
+    "partialOutageDesc": "{{count}} kaynak çevrimiçi değil.",
+    "systemDownDesc": "Sistem bağlantısı tamamen kesildi!",
+    "retrying": "Yeniden Deneniyor",
+    "secondsAgo": "sn. Önce",
+    "minutesAgo": "dk. Önce",
+    "justNow": "Şimdi",
+    "resourcesOnline": "KAYNAK AKTİF",
+    "refreshing": "Yenileniyor...",
+    "noConnection": "Bağlantı Yok",
+    "noServerConnection": "SUNUCU BAĞLANTISI YOK",
+    "performanceNoConnectionDesc": "Sistem kaynaklarına ulaşılamıyor.",
+    "performanceNoServerDesc": "Performans verilerini okumak için sunucu bağlantısı bekleniyor.",
+    "performanceWarning": "Performans Düşük",
+    "performanceCritical": "Kritik Performans Kaybı",
+    "systemStable": "SİSTEM KARARLI",
+    "systemStability": "Sistem Kararlılığı",
+    "statusInfraDown": "ALTYAPI KAPALI",
+    "statusDegraded": "VERİM DÜŞÜK",
+    "statusStable": "KARARLI",
+    "statusDisconnected": "BAĞLANTI YOK",
+    "sustainabilityNoConnectionDesc": "Oturum bilgisi alınamadı.",
+    "sustainabilityStable": "Sistem genelinde {{count}} aktif oturum ile kapasite yönetimi stabil duruyor."
   },
   "queries": {
     "title": "Sorgular",
@@ -154,9 +184,10 @@
     "title": "Tablolar",
     "pageTitle": "Tablo Yönetimi",
     "pageDescription": "Veritabanı tablolarını listeleyin, verileri filtreleyin ve ilişkileri inceleyin.",
+    "readyToTable": "Tablo Seçimi Hazır",
+    "selectToStart": "Başlamak için sol menüden bir tablo seçin.",
     "activeTable": "Aktif Tablo",
     "readyToView": "Tablo Verisi Hazır",
-    "selectToStart": "Sol menüden bir tablo seçerek başlayın.",
     "tabData": "Tablo Verisi",
     "tabSchema": "Şema & İlişkiler",
     "recordUpdated": "Kayıt güncellendi.",
@@ -512,6 +543,7 @@
     }
   },
   "common": {
+    "global": "GENEL",
     "cancel": "İptal",
     "confirm": "Onayla",
     "refresh": "Yenile",
@@ -523,7 +555,11 @@
     "saveChanges": "Değişiklikleri Kaydet",
     "giveUp": "Vazgeç",
     "minimize": "Küçült",
-    "expand": "Genişlet"
+    "collapse": "Menüyü Daralt",
+    "expand": "Genişlet",
+    "close": "Kapat",
+    "info": "Bilgi",
+    "aboutApp": "HAKKINDA"
   },
   "settings": {
     "title": "Sistem Ayarları",
@@ -562,6 +598,9 @@
     "indexOptimization": "İndeks Optimizasyonu",
     "warningLevel": "Uyarı Seviyesi (% Parçalanma)",
     "criticalLevel": "Kritik Seviye (% Parçalanma - Rebuild)",
+    "monitoringTitle": "Servis ve İzleme Ayarları",
+    "monitoringInterval": "İzleme Sıklığı (Saniye)",
+    "monitoringIntervalDesc": "Arka planda bağlantı ve sağlık kontrollerinin ne sıklıkla yapılacağını belirleyin.",
     "statisticsGeneral": "İstatistik & Genel",
     "staleThreshold": "İstatistik Eskime Uyarı Sınırı (%)",
     "permissions": {
@@ -616,7 +655,28 @@
     "updateError": "Güncelleme işlemi başarısız oldu.",
     "systemErrorUpdate": "Sistem Hatası: Güncelleme yapılamadı!",
     "deleteSuccess": "Ortam sistemden başarıyla silindi.",
-    "systemErrorDeletion": "Sistem Hatası: Silme işlemi sırasında çökme yaşandı!"
+    "systemErrorDeletion": "Sistem Hatası: Silme işlemi sırasında çökme yaşandı!",
+    "heroTagline": "Altyapınızı tam kontrol altında tutun",
+    "heroSubtitle": "SQL Server yönetimi, canlı sunucu izleme, betik çalıştırma ve yetkilendirme — tek platformda.",
+    "heroStatEnvs": "Ortam",
+    "heroStatDbs": "Veritabanı",
+    "heroStatServers": "Sunucu",
+    "heroStatTotal": "Toplam Kaynak",
+    "featureMonitoringTitle": "Canlı İzleme",
+    "featureMonitoringDesc": "CPU, RAM, Disk ve Ağ verilerini gerçek zamanlı takip edin.",
+    "featureSqlTitle": "SQL Server Yönetimi",
+    "featureSqlDesc": "Tablolar, saklı yordamlar, görevler ve indeks optimizasyonu.",
+    "featureScriptsTitle": "Script Çalıştırma",
+    "featureScriptsDesc": "Özel SQL sorguları yazın ve hazır betiklerinizi yönetin.",
+    "featurePermsTitle": "Yetki Yönetimi",
+    "featurePermsDesc": "Kritik işlemleri yönetici onayıyla güvende tutun.",
+    "recentNotifications": "Bildirimler",
+    "viewAllNotifications": "Tümünü Gör",
+    "noRecentNotifications": "Henüz bildirim yok",
+    "noRecentNotificationsDesc": "Sistem aktiviteleri burada görünecek.",
+    "selectEnvironment": "Ortam Seçin",
+    "selectEnvironmentDesc": "Çalışmak istediğiniz ortamı seçin veya yeni bir tane oluşturun.",
+    "settingsDisabledHint": "Ayarlara erişmek için bir ortama girin"
   },
   "winPerformance": {
     "title": "Windows Performans İzleyicisi",
@@ -661,5 +721,77 @@
     "waitingForEnd": "Bitiş Bekleniyor...",
     "onlyForReport": "Yalnızca Rapor İçin",
     "clear": "Temizle"
+  },
+  "notifications": {
+    "title": "Sistem Bildirimleri",
+    "description": "Altyapınızdaki ve sunucularınızdaki tüm kayıtlı aktiviteler bu alanda arşivlenir.",
+    "unreadCount": "{{count}} Okunmamış",
+    "markAllAsRead": "Tümünü Okundu İşaretle",
+    "clearHistory": "Geçmişi Temizle",
+    "emptyHistory": "Bildirim Kutusu Boş",
+    "emptyHistoryDesc": "Sisteminiz stabil bir şekilde çalışıyor. Herhangi bir uyarı veya aktivite olduğunda burada listelenecektir.",
+    "markAsUnread": "Okunmadı İşaretle",
+    "markAsRead": "Okundu İşaretle",
+    "notification": "Bildirim",
+    "systemRecovered": {
+      "title": "Sistem Kurtarıldı",
+      "body": "{{name}} sunucusu tekrar çevrimiçi oldu."
+    },
+    "serviceStopped": {
+      "title": "Servis Beklenmedik Şekilde Durdu",
+      "body": "{{name}} sunucusundaki {{service}} servisi çöktü veya durduruldu!"
+    },
+    "cpuHigh": {
+      "title": "Kritik CPU Yükü",
+      "body": "{{name}} sunucusunda CPU kullanımı %{{value}} seviyesine ulaştı!"
+    },
+    "ramHigh": {
+      "title": "Kritik RAM Uyarısı",
+      "body": "{{name}} sunucusunda bellek kullanımı %{{value}} seviyesine ulaştı!"
+    },
+    "diskHigh": {
+      "title": "Kritik Disk Doluluğu",
+      "body": "{{name}} sunucusunda {{drive}} sürücüsü %{{value}} doluluğa ulaştı!"
+    },
+    "serverOffline": {
+      "title": "Sunucu Bağlantısı Koptu",
+      "body": "{{name}} sunucusuna ulaşılamıyor. Lütfen ağı veya sunucu durumunu kontrol edin."
+    },
+    "dbOffline": {
+      "title": "Veritabanı Bağlantısı Koptu",
+      "body": "{{name}} veritabanına ulaşılamıyor. Lütfen ağı veya veritabanı durumunu kontrol edin."
+    },
+    "serverDisconnected": {
+      "title": "Sunucu Bağlantısı Yok",
+      "body": "{{name}} sunucusuna ulaşılamıyor. Kontroller devam ediyor..."
+    },
+    "dbDisconnected": {
+      "title": "Veritabanı Bağlantısı Yok",
+      "body": "{{name}} veritabanına ulaşılamıyor. Kontroller devam ediyor..."
+    },
+    "dbOfflineBatched": {
+      "title": "{{count}} Veritabanı Bağlantısı Koptu",
+      "body": "Şu veritabanlarına ulaşılamıyor: {{names}}"
+    },
+    "serverOfflineBatched": {
+      "title": "{{count}} Sunucu Bağlantısı Koptu",
+      "body": "Şu sunuculara ulaşılamıyor: {{names}}"
+    },
+    "dbDisconnectedBatched": {
+      "title": "{{count}} Veritabanı Bağlantısı Yok",
+      "body": "Şu veritabanlarına ulaşılamıyor: {{names}}"
+    },
+    "serverDisconnectedBatched": {
+      "title": "{{count}} Sunucu Bağlantısı Yok",
+      "body": "Şu sunuculara ulaşılamıyor: {{names}}"
+    },
+    "dbRecovered": {
+      "title": "Veritabanı Kurtarıldı",
+      "body": "{{name}} veritabanı bağlantısı başarıyla tekrar sağlandı."
+    }
+  },
+  "tray": {
+    "show": "Vesgen'i Göster",
+    "quit": "Çıkış Yap (Tamamen Kapat)"
   }
 }

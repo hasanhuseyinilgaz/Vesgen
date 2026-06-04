@@ -44,9 +44,10 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
                 server: db.server,
                 database: (db as any).databaseName || (db as any).database || "",
                 user: db.user,
-                password: db.password,
+                password: db.password || "",
                 encrypt: false,
                 trustServerCertificate: true,
+                saveConnection: true,
             });
 
             if (result.success) {
@@ -106,15 +107,16 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
         }
     };
 
-    const handleSaveDatabase = async (dbParams: { alias: string, server: string, user: string, password?: string, databaseName: string }) => {
+    const handleSaveDatabase = async (dbParams: { 
+        alias: string, 
+        server: string, 
+        user: string, 
+        password?: string, 
+        databaseName: string,
+        excludeFromMonitoring?: boolean 
+    }) => {
         if (!tenant || !dbParams.alias) return false;
         setIsSaving(true);
-        
-        const isConnected = await handleTestConnection(dbParams);
-        if (!isConnected) {
-            setIsSaving(false);
-            return false;
-        }
 
         const newDb: DatabaseResource = {
             id: `db-${Date.now()}`,
@@ -128,7 +130,11 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
             ...tenant,
             databases: [
                 ...(tenant.databases || []),
-                { ...newDb, databaseName: dbParams.databaseName } as any,
+                { 
+                    ...newDb, 
+                    databaseName: dbParams.databaseName,
+                    excludeFromMonitoring: dbParams.excludeFromMonitoring || false 
+                } as any,
             ],
         };
 
@@ -147,15 +153,16 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
         return false;
     };
 
-    const handleUpdateDatabase = async (dbId: string, dbParams: { alias: string, server: string, user: string, password?: string, databaseName: string }) => {
+    const handleUpdateDatabase = async (dbId: string, dbParams: { 
+        alias: string, 
+        server: string, 
+        user: string, 
+        password?: string, 
+        databaseName: string,
+        excludeFromMonitoring?: boolean 
+    }) => {
         if (!tenant || !dbId || !dbParams.alias) return false;
         setIsUpdatingDb(true);
-
-        const isConnected = await handleTestConnection(dbParams);
-        if (!isConnected) {
-            setIsUpdatingDb(false);
-            return false;
-        }
 
         const updatedDatabases = tenant.databases.map((db) => {
             if (db.id === dbId)
@@ -166,6 +173,7 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
                     user: dbParams.user,
                     password: dbParams.password,
                     databaseName: dbParams.databaseName,
+                    excludeFromMonitoring: dbParams.excludeFromMonitoring || false,
                 } as any;
             return db;
         });
@@ -175,6 +183,10 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
         try {
             const result = await window.electronAPI.fsSaveTenant(updatedTenant);
             if (result.success) {
+                const updatedConfig = updatedDatabases.find(d => d.id === dbId);
+                if (updatedConfig) {
+                    await window.electronAPI.monitoringUpdateConfig(dbId, updatedConfig);
+                }
                 await window.electronAPI.dbDisconnect();
                 setIsDbConnected(false);
                 await loadTenantInfo();
@@ -225,5 +237,7 @@ export function useDatabase(tenant: Tenant | null, loadTenantInfo: () => Promise
         handleSaveDatabase,
         handleUpdateDatabase,
         handleDeleteDatabase,
+        connectToActiveDatabase,
+        refreshConnection: connectToActiveDatabase,
     };
 }

@@ -10,7 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, AlertTriangle, Trash2, Save } from "lucide-react";
+import { Settings, AlertTriangle, Trash2, Save, ShieldOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Tenant } from "@/types";
 
 interface EditWinServerModalProps {
@@ -45,6 +46,7 @@ export default function EditWinServerModal({
     const [winHost, setWinHost] = useState("");
     const [winUser, setWinUser] = useState("");
     const [winPassword, setWinPassword] = useState("");
+    const [excludeFromMonitoring, setExcludeFromMonitoring] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     useEffect(() => {
@@ -55,6 +57,7 @@ export default function EditWinServerModal({
                 setWinHost(server.host);
                 setWinUser(server.username);
                 setWinPassword(server.password || "");
+                setExcludeFromMonitoring(server.excludeFromMonitoring || false);
                 setShowDeleteConfirm(false);
             }
         }
@@ -65,6 +68,7 @@ export default function EditWinServerModal({
         host: winHost,
         username: winUser,
         password: winPassword,
+        excludeFromMonitoring,
     });
 
     const handleUpdate = async () => {
@@ -109,6 +113,21 @@ export default function EditWinServerModal({
                             <Label>{t("dashboard.winPassword")}</Label>
                             <Input type="password" placeholder={t("dashboard.passwordPlaceholder")} value={winPassword} onChange={(e) => setWinPassword(e.target.value)} />
                         </div>
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-border/40 bg-muted/5">
+                        <div className="space-y-0.5">
+                            <Label className="text-sm font-bold flex items-center gap-2">
+                                <ShieldOff className="w-3.5 h-3.5 text-orange-500" />
+                                {t("dashboard.excludeFromMonitoring")}
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground font-medium">
+                                {t("dashboard.excludeFromMonitoringDesc")}
+                            </p>
+                        </div>
+                        <Switch 
+                            checked={excludeFromMonitoring}
+                            onCheckedChange={setExcludeFromMonitoring}
+                        />
                     </div>
                     {testResult && (
                         <div className={`p-3 rounded-md text-sm ${testResult.success ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>

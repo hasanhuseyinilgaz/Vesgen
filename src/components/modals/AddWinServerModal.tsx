@@ -10,7 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Monitor } from "lucide-react";
+import { Monitor, ShieldOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface AddWinServerModalProps {
     isOpen: boolean;
@@ -36,12 +37,14 @@ export default function AddWinServerModal({
     const [winHost, setWinHost] = useState("");
     const [winUser, setWinUser] = useState("");
     const [winPassword, setWinPassword] = useState("");
+    const [excludeFromMonitoring, setExcludeFromMonitoring] = useState(false);
 
     const getParams = () => ({
         alias: winAlias,
         host: winHost,
         username: winUser,
         password: winPassword,
+        excludeFromMonitoring,
     });
 
     const handleSave = async () => {
@@ -51,6 +54,7 @@ export default function AddWinServerModal({
             setWinHost("");
             setWinUser("");
             setWinPassword("");
+            setExcludeFromMonitoring(false);
             onClose();
         }
     };
@@ -98,6 +102,21 @@ export default function AddWinServerModal({
                                 onChange={(e) => setWinPassword(e.target.value)} 
                             />
                         </div>
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-border/40 bg-muted/5">
+                        <div className="space-y-0.5">
+                            <Label className="text-sm font-bold flex items-center gap-2">
+                                <ShieldOff className="w-3.5 h-3.5 text-orange-500" />
+                                {t("dashboard.excludeFromMonitoring")}
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground font-medium">
+                                {t("dashboard.excludeFromMonitoringDesc")}
+                            </p>
+                        </div>
+                        <Switch 
+                            checked={excludeFromMonitoring}
+                            onCheckedChange={setExcludeFromMonitoring}
+                        />
                     </div>
                     {testResult && (
                         <div className={`p-3 rounded-md text-sm ${testResult.success ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>

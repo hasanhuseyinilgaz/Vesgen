@@ -50,6 +50,8 @@ import {
 } from "@/hooks/useSqlJobs";
 
 import ActionTooltip from "@/components/ui/action-tooltip";
+import { useDatabaseContext } from "@/contexts/DatabaseContext";
+import ConnectionRequired from "@/components/ConnectionRequired";
 
 const formatSqlDate = (d?: number, t?: number) => {
   if (!d) return "-";
@@ -91,6 +93,7 @@ const groupHistoryByRun = (history: JobHistory[]) => {
 
 export default function SqlJobsPage() {
   const { t } = useTranslation();
+  const { isDbConnected } = useDatabaseContext();
   const {
     jobs,
     loading,
@@ -154,8 +157,10 @@ export default function SqlJobsPage() {
   });
 
   useEffect(() => {
-    fetchJobs();
-  }, [fetchJobs]);
+    if (isDbConnected) {
+      fetchJobs();
+    }
+  }, [fetchJobs, isDbConnected]);
 
   const handleAction = async () => {
     if (!confirmModal.job || !confirmModal.action) return;
@@ -311,6 +316,29 @@ export default function SqlJobsPage() {
   const filteredJobs = jobs.filter((j: SqlJob) =>
     j.JobName.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+
+  if (!isDbConnected) {
+    return (
+      <PageLayout>
+        <div className="flex flex-col h-full bg-transparent overflow-hidden w-full">
+          <div className="flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+            <PageHeader
+              title={t("jobs.title")}
+              icon={ServerCog}
+              description={t("jobs.description")}
+              showLimitSelector={false}
+              showFilterButton={false}
+              showLiveButton={false}
+              showRefreshButton={false}
+              recordCount={0}
+              showRecordCount={false}
+            />
+            <ConnectionRequired />
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout>
@@ -809,67 +837,44 @@ export default function SqlJobsPage() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="space-y-3 border-l pl-8">
+                            <div className="space-y-3">
                               <Label className="font-semibold text-muted-foreground">
-                                {t("jobs.scheduleDetails")}
+                                {t("jobs.freqInterval")}
                               </Label>
-                              {sch.freqType === 8 && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm">
-                                    {t("jobs.every")}
-                                  </span>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    className="w-16 h-8 text-center"
-                                    value={sch.freqInterval}
-                                    onChange={(e) =>
-                                      updateSchedule(
-                                        "freqInterval",
-                                        e.target.value,
-                                      )
-                                    }
-                                  />
-                                  <span className="text-sm">
-                                    {t("jobs.weeks")}
-                                  </span>
-                                </div>
-                              )}
-                              {sch.freqType === 16 && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm">
-                                    {t("jobs.dayOf")}
-                                  </span>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    className="w-16 h-8 text-center"
-                                    value={sch.freqInterval}
-                                    onChange={(e) =>
-                                      updateSchedule(
-                                        "freqInterval",
-                                        e.target.value,
-                                      )
-                                    }
-                                  />
-                                  <span className="text-sm">
-                                    {t("jobs.day")}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="pt-4 border-t mt-4">
-                                <Label className="font-semibold text-muted-foreground mb-2 block">
-                                  {t("jobs.runTime")}
-                                </Label>
+                              <div className="flex items-center gap-3">
                                 <Input
-                                  type="time"
-                                  className="w-32 font-bold bg-background"
-                                  value={sch.time}
+                                  type="number"
+                                  min="1"
+                                  value={sch.freqInterval}
                                   onChange={(e) =>
-                                    updateSchedule("time", e.target.value)
+                                    updateSchedule(
+                                      "freqInterval",
+                                      parseInt(e.target.value),
+                                    )
                                   }
+                                  className="w-24"
                                 />
+                                <span className="text-sm text-muted-foreground">
+                                  {sch.freqType === 4
+                                    ? t("jobs.days")
+                                    : sch.freqType === 8
+                                      ? t("jobs.weeks")
+                                      : t("jobs.months")}
+                                </span>
                               </div>
+                            </div>
+                            <div className="space-y-3">
+                              <Label className="font-semibold text-muted-foreground">
+                                {t("jobs.startTime")}
+                              </Label>
+                              <Input
+                                type="time"
+                                value={sch.time}
+                                onChange={(e) =>
+                                  updateSchedule("time", e.target.value)
+                                }
+                                className="w-full"
+                              />
                             </div>
                           </div>
                         )}
@@ -877,29 +882,32 @@ export default function SqlJobsPage() {
                     </Card>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                  <div className="text-center py-12 text-muted-foreground italic bg-muted/10 rounded-xl border-dashed border-2">
                     {t("jobs.noSchedules")}
                   </div>
                 )}
               </div>
             )}
           </div>
-          <DialogFooter className="p-4 border-t bg-card">
+          <DialogFooter className="p-6 border-t glass-card shrink-0 rounded-none">
             <Button
               variant="outline"
               onClick={() => setEditorModal((p) => ({ ...p, isOpen: false }))}
+              disabled={actionLoading}
             >
               {t("common.cancel")}
             </Button>
             <Button
               onClick={handleSaveJob}
               disabled={actionLoading}
-              className="bg-primary text-primary-foreground px-8 font-bold"
+              className="px-8 font-bold shadow-lg"
             >
-              {actionLoading && (
+              {actionLoading ? (
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              )}{" "}
-              {t("jobs.saveAndApply")}
+              ) : (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              )}
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -911,146 +919,140 @@ export default function SqlJobsPage() {
           !o && setHistoryModal((p) => ({ ...p, isOpen: false }))
         }
       >
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-background border-border/50 shadow-2xl">
-          <DialogHeader className="p-6 border-b bg-card shrink-0 shadow-sm z-10 flex flex-row justify-between items-center">
-            <DialogTitle className="flex items-center text-xl text-foreground">
-              <History className="w-6 h-6 mr-3 text-primary" />{" "}
-              {t("jobs.historyTitle")}: {historyModal.jobName}
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background border-border shadow-2xl">
+          <DialogHeader className="p-6 border-b glass-card shrink-0 shadow-sm z-10 rounded-none">
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5 text-primary" />
+              {historyModal.jobName} - {t("jobs.history")}
             </DialogTitle>
-            <Button
-              onClick={() => openHistory(historyModal.jobName)}
-              variant="outline"
-              size="sm"
-              className="shadow-sm"
-            >
-              <RefreshCw
-                className={cn(
-                  "w-3.5 h-3.5 mr-1.5",
-                  historyModal.loading && "animate-spin",
-                )}
-              />{" "}
-              {t("common.refresh")}
-            </Button>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-muted/5 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-6 bg-muted/5 custom-scrollbar">
             {historyModal.loading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                <RefreshCw className="w-10 h-10 animate-spin mb-4 opacity-30" />
-                {t("jobs.analyzingHistory")}
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <RefreshCw className="w-10 h-10 animate-spin text-primary opacity-20" />
+                <p className="text-sm font-medium text-muted-foreground animate-pulse">
+                  {t("jobs.loadingHistory")}
+                </p>
               </div>
-            ) : groupHistoryByRun(historyModal.history).length === 0 ? (
-              <div className="text-center py-20 text-muted-foreground border-2 border-dashed border-border/50 rounded-xl bg-card">
-                {t("jobs.noHistory")}
+            ) : historyModal.history.length > 0 ? (
+              <div className="space-y-6">
+                {groupHistoryByRun(historyModal.history).map((run, runIdx) => (
+                  <Card
+                    key={runIdx}
+                    className="overflow-hidden border-border/50 shadow-md transition-all hover:shadow-lg"
+                  >
+                    <div
+                      className={cn(
+                        "px-4 py-3 border-b flex justify-between items-center",
+                        run.outcome?.RunStatus === 1
+                          ? "bg-success/5 border-success/10"
+                          : "bg-destructive/5 border-destructive/10",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        {run.outcome?.RunStatus === 1 ? (
+                          <div className="p-1.5 rounded-full bg-success/20 text-success">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                        ) : (
+                          <div className="p-1.5 rounded-full bg-destructive/20 text-destructive">
+                            <AlertTriangle className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-bold text-foreground">
+                            {formatSqlDate(
+                              run.outcome?.RunDate,
+                              run.outcome?.RunTime,
+                            )}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground font-mono">
+                            Duration: {formatDuration(run.outcome?.Duration)}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
+                          run.outcome?.RunStatus === 1
+                            ? "bg-success/10 text-success border-success/20"
+                            : "bg-destructive/10 text-destructive border-destructive/20",
+                        )}
+                      >
+                        {run.outcome?.RunStatus === 1
+                          ? t("jobs.success")
+                          : t("jobs.failed")}
+                      </span>
+                    </div>
+                    {run.steps.length > 0 && (
+                      <CardContent className="p-0">
+                        <table className="w-full text-[12px] text-left">
+                          <thead className="bg-muted/30 border-b">
+                            <tr>
+                              <th className="px-4 py-2 font-bold text-muted-foreground">
+                                #
+                              </th>
+                              <th className="px-4 py-2 font-bold text-muted-foreground">
+                                {t("jobs.stepName")}
+                              </th>
+                              <th className="px-4 py-2 font-bold text-muted-foreground">
+                                {t("jobs.status")}
+                              </th>
+                              <th className="px-4 py-2 font-bold text-muted-foreground">
+                                {t("jobs.duration")}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {run.steps.map((s, si) => (
+                              <tr
+                                key={si}
+                                className="hover:bg-muted/10 transition-colors"
+                              >
+                                <td className="px-4 py-2.5 font-mono text-muted-foreground">
+                                  {s.StepId}
+                                </td>
+                                <td className="px-4 py-2.5 font-semibold text-foreground/80">
+                                  {s.StepName}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  {s.RunStatus === 1 ? (
+                                    <span className="text-success flex items-center gap-1 font-bold">
+                                      <CheckCircle2 className="w-3 h-3" /> OK
+                                    </span>
+                                  ) : (
+                                    <span className="text-destructive flex items-center gap-1 font-bold">
+                                      <AlertTriangle className="w-3 h-3" /> FAIL
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-muted-foreground font-mono">
+                                  {formatDuration(s.Duration)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
               </div>
             ) : (
-              <div className="space-y-10">
-                {groupHistoryByRun(historyModal.history).map(
-                  (run: any, idx: number) => {
-                    const isSuccess = run.outcome?.RunStatus === 1;
-                    const isFail = run.outcome?.RunStatus === 0;
-                    return (
-                      <div
-                        key={idx}
-                        className="relative bg-card border border-border/60 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow"
-                      >
-                        {run.steps.length > 0 && (
-                          <div className="absolute top-[60px] bottom-10 left-[41px] w-0.5 bg-border z-0" />
-                        )}
-                        <div className="relative z-10 flex items-start gap-4 mb-2">
-                          <div className="bg-card p-1 -ml-1 rounded-full shrink-0">
-                            {isSuccess ? (
-                              <CheckCircle2 className="w-7 h-7 text-success fill-success/10" />
-                            ) : isFail ? (
-                              <AlertTriangle className="w-7 h-7 text-destructive fill-destructive/10" />
-                            ) : (
-                              <Ban className="w-7 h-7 text-warning fill-warning/10" />
-                            )}
-                          </div>
-                          <div className="flex-1 pt-0.5">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <h4 className="font-bold text-lg text-foreground tracking-tight">
-                                {t("jobs.runResult")}
-                              </h4>
-                              <span className="text-xs font-semibold text-muted-foreground bg-muted/80 px-2.5 py-1 rounded-md border border-border/50">
-                                {formatSqlDate(
-                                  run.outcome?.RunDate,
-                                  run.outcome?.RunTime,
-                                )}
-                              </span>
-                            </div>
-                            {run.outcome?.Duration !== undefined && (
-                              <p className="text-xs font-bold text-muted-foreground mt-1.5 uppercase tracking-wider">
-                                {t("jobs.totalDuration")}:{" "}
-                                {formatDuration(run.outcome.Duration)}
-                              </p>
-                            )}
-                            <p className="text-sm text-foreground/80 mt-2 leading-relaxed">
-                              {run.outcome?.Message}
-                            </p>
-                          </div>
-                        </div>
-                        {run.steps.length > 0 && (
-                          <div className="space-y-6 mt-8 pl-[46px]">
-                            {[...run.steps]
-                              .reverse()
-                              .map((step: any, j: number) => {
-                                const stepSuccess = step.RunStatus === 1;
-                                return (
-                                  <div
-                                    key={j}
-                                    className="relative z-10 flex items-start gap-4"
-                                  >
-                                    <div
-                                      className={cn(
-                                        "absolute left-[-31px] top-1.5 w-3 h-3 rounded-full border-2 border-card",
-                                        stepSuccess
-                                          ? "bg-success"
-                                          : step.RunStatus === 0
-                                            ? "bg-destructive"
-                                            : "bg-warning",
-                                      )}
-                                    />
-                                    <div className="flex-1 w-full overflow-hidden">
-                                      <div className="flex items-center gap-2">
-                                        <Terminal className="w-3.5 h-3.5 text-primary" />
-                                        <h5 className="font-bold text-sm text-foreground">
-                                          {t("jobs.step")} {step.StepId}:{" "}
-                                          {step.StepName}
-                                        </h5>
-                                      </div>
-                                      <div className="mt-2 text-[12px] font-mono leading-relaxed text-muted-foreground/90 bg-muted/40 p-3 rounded-lg border border-border/50 whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">
-                                        {step.Message}
-                                      </div>
-                                      <div className="flex gap-4 mt-2 text-[11px] font-semibold text-muted-foreground">
-                                        <span className="flex items-center gap-1">
-                                          <Clock className="w-3 h-3" />
-                                          {formatDuration(step.Duration)}
-                                        </span>
-                                        <span
-                                          className={
-                                            stepSuccess
-                                              ? "text-success"
-                                              : "text-destructive"
-                                          }
-                                        >
-                                          {stepSuccess
-                                            ? t("jobs.success")
-                                            : t("jobs.failed")}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  },
-                )}
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+                <Ban className="w-12 h-12 opacity-10" />
+                <p className="italic text-sm">{t("jobs.noHistory")}</p>
               </div>
             )}
           </div>
+          <DialogFooter className="p-6 border-t glass-card shrink-0 rounded-none">
+            <Button
+              onClick={() => setHistoryModal((p) => ({ ...p, isOpen: false }))}
+              className="px-8"
+            >
+              {t("common.close")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </PageLayout>

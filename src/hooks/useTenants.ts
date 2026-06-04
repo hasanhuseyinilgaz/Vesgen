@@ -38,6 +38,15 @@ export function useTenants() {
     loadTenants();
   }, [loadTenants]);
 
+  useEffect(() => {
+    if (window.electronAPI?.onTenantsUpdated) {
+      const unsub = window.electronAPI.onTenantsUpdated(() => {
+        loadTenants();
+      });
+      return () => unsub();
+    }
+  }, [loadTenants]);
+
   const createTenant = async (
     name: string,
     description: string,

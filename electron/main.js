@@ -1,14 +1,71 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Notification, Tray, Menu, powerMonitor } = require("electron");
 const path = require("path");
+const fs = require("fs").promises;
+const pkg = require("../package.json");
+
+app.name = "Vesgen";
+const NOTIF_ICON_PNG = path.join(__dirname, "../assets/icon.png");
+const NOTIF_ICON_ICO = path.join(__dirname, "../assets/icon.ico");
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId("Vesgen");
+}
+
 const sql = require("mssql");
 const Store = require("electron-store");
-const fs = require("fs").promises;
 const security = require("./security");
 const { Client } = require("ssh2");
 
 const store = new Store();
 let mainWindow;
+let tray = null;
+let isQuitting = false;
 let pool = null;
+const activeTerminals = new Map();
+
+async function ensurePool() {
+  if (pool && pool.connected) {
+    return pool;
+  }
+
+  if (pool) {
+    try {
+      await pool.connect();
+      return pool;
+    } catch (err) {
+      console.log(`[${ts()}] Pool reconnection failed, clearing pool:`, err.message);
+      pool = null;
+    }
+  }
+
+  const lastConn = store.get("lastConnection");
+  if (lastConn) {
+    try {
+      console.log(`[${ts()}] Attempting auto-reconnect to ${lastConn.server}/${lastConn.database}...`);
+      const dbConfig = {
+        server: lastConn.server,
+        database: lastConn.database,
+        user: lastConn.user,
+        password: security.decrypt(lastConn.password),
+        options: {
+          encrypt: lastConn.encrypt || false,
+          trustServerCertificate: lastConn.trustServerCertificate || true,
+          enableArithAbort: true,
+        },
+        pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
+      };
+      pool = await sql.connect(dbConfig);
+      console.log(`[${ts()}] Auto-reconnect successful.`);
+      return pool;
+    } catch (err) {
+      console.error(`[${ts()}] Auto-reconnect failed:`, err.message);
+      pool = null;
+      throw new Error(`Bağlantı Hatası: Veritabanına ulaşılamıyor. Lütfen ağınızı veya VPN bağlantınızı kontrol edin. (Detay: ${err.message})`);
+    }
+  }
+
+  throw new Error("Veritabanı bağlantısı yok. Lütfen bir veritabanına bağlanın.");
+}
 
 const serializeData = (data) => {
   return JSON.parse(
@@ -41,6 +98,7 @@ const DEFAULT_CONFIG = {
   ui: {
     primaryColor: "#f59e0b",
     table: { defaultPageSize: 20 },
+    monitoring: { interval: 10 },
   },
 };
 
@@ -101,6 +159,9 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 700,
 
+    show: false,
+    backgroundColor: '#0a0a0a',
+
     frame: false,
     titleBarStyle: "hidden",
 
@@ -109,7 +170,7 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
     },
-    icon: path.join(__dirname, "../assets/icon.png"),
+    icon: process.platform === 'win32' ? NOTIF_ICON_ICO : NOTIF_ICON_PNG,
   });
 
   mainWindow.setMenu(null);
@@ -124,6 +185,19 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "../dist/react/index.html"));
   }
 
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+  });
+
+  mainWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+
+      MonitoringService.updateGlobalFocus(false);
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -137,21 +211,113 @@ function createWindow() {
   });
 }
 
+const fsSync = require("fs");
+function createTray() {
+  const iconPath = path.join(__dirname, "../assets/icon.png");
+  let trayIcon;
+  if (fsSync.existsSync(iconPath)) {
+    trayIcon = require("electron").nativeImage.createFromPath(iconPath);
+  } else {
+    trayIcon = require("electron").nativeImage.createEmpty();
+  }
+
+  tray = new Tray(trayIcon);
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Vesgen'i Göster",
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Çıkış Yap (Tamamen Kapat)",
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip("Vesgen Monitoring & Management");
+  tray.setContextMenu(contextMenu);
+
+  tray.on("click", () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   await ensureConfig();
   await ensureFileSystem();
+
+  if (process.platform === 'win32' && !app.isPackaged) {
+    const fsSync = require('fs');
+    const shortcutPath = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Vesgen.lnk');
+    if (!fsSync.existsSync(shortcutPath)) {
+      const { exec } = require('child_process');
+      const targetPath = process.execPath;
+      const iconPath = NOTIF_ICON_ICO;
+      const psCommand = `powershell -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${shortcutPath}'); $s.TargetPath = '${targetPath}'; $s.IconLocation = '${iconPath}'; $s.Description = 'Vesgen Dev'; $s.Save();"`;
+      exec(psCommand, (err) => {
+        if (!err) console.log(`[${ts()}] System: Created dev shortcut for notification icons.`);
+      });
+    }
+  }
+
+  initGlobalMonitoring();
   createWindow();
+  createTray();
+
+  app.on('browser-window-blur', () => { });
+
+  powerMonitor.on('suspend', () => console.log(`[${ts()}] System: Suspending (Going to sleep)`));
+  powerMonitor.on('resume', () => {
+    console.log(`[${ts()}] System: Resumed from sleep. Refreshing monitoring...`);
+    MonitoringService.sessions.forEach((sess, id) => {
+      if (sess.status === "error" || sess.status === "connecting") {
+        MonitoringService.runCycle(id);
+      }
+    });
+  });
+});
+
+ipcMain.on("app:networkStatus", (event, { online }) => {
+  console.log(`[${ts()}] System Network: ${online ? 'ONLINE' : 'OFFLINE'}`);
+  if (online) {
+    MonitoringService.sessions.forEach((sess, id) => {
+      if (sess.status === "error") {
+        MonitoringService.runCycle(id);
+      }
+    });
+  }
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
+  if (process.platform === "darwin") {
+
   }
 });
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  } else if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
   }
 });
 
@@ -170,7 +336,94 @@ ipcMain.on("window:maximize", () => {
 });
 
 ipcMain.on("window:close", () => {
-  if (mainWindow) mainWindow.close();
+  if (mainWindow) {
+    mainWindow.hide();
+  }
+});
+
+ipcMain.on("app:pageChanged", (event, pagePath) => {
+  MonitoringService.updatePage(pagePath);
+});
+
+ipcMain.on("app:setTrayLanguage", (event, langStrings) => {
+  if (tray) {
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: langStrings.show || "Vesgen'i Göster",
+        click: () => {
+          if (mainWindow) {
+            mainWindow.show();
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+          }
+        }
+      },
+      { type: "separator" },
+      {
+        label: langStrings.quit || "Çıkış Yap (Tamamen Kapat)",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        }
+      }
+    ]);
+    tray.setContextMenu(contextMenu);
+  }
+});
+
+function addAppNotification(opts) {
+  const { title, body, titleKey, bodyKey, data, type = 'info', serverId = null } = opts;
+  const notifs = store.get("app_notifications", []);
+  const newNotif = {
+    id: Date.now().toString() + Math.random().toString(36).substring(2, 7),
+    title,
+    body,
+    titleKey,
+    bodyKey,
+    data,
+    type,
+    timestamp: Date.now(),
+    read: false,
+    serverId
+  };
+
+  notifs.unshift(newNotif);
+  if (notifs.length > 5000) notifs.length = 5000;
+  store.set("app_notifications", notifs);
+
+  if (mainWindow) {
+    mainWindow.webContents.send("app:notification", newNotif);
+  }
+}
+
+ipcMain.handle("notifications:get", () => store.get("app_notifications", []));
+ipcMain.handle("notifications:markAsRead", (event, id) => {
+  const notifs = store.get("app_notifications", []);
+  const idx = notifs.findIndex((n) => n.id === id);
+  if (idx !== -1) {
+    notifs[idx].read = true;
+    store.set("app_notifications", notifs);
+  }
+  return true;
+});
+ipcMain.handle("notifications:markAllAsRead", () => {
+  const notifs = store.get("app_notifications", []);
+  notifs.forEach(n => { n.read = true; });
+  store.set("app_notifications", notifs);
+  return true;
+});
+ipcMain.handle("notifications:clearAll", () => {
+  store.set("app_notifications", []);
+  return true;
+});
+ipcMain.handle("notifications:toggleRead", (event, id) => {
+  const notifs = store.get("app_notifications", []);
+  const idx = notifs.findIndex((n) => n.id === id);
+  if (idx !== -1) {
+    notifs[idx].read = !notifs[idx].read;
+    store.set("app_notifications", notifs);
+  }
+  return true;
 });
 
 ipcMain.handle("config:get", async () => {
@@ -207,8 +460,6 @@ ipcMain.handle("auth:verifyAdmin", async (event, password) => {
 
 ipcMain.handle("db:connect", async (event, config) => {
   try {
-    if (pool) await pool.close();
-
     const dbConfig = {
       server: config.server,
       database: config.database,
@@ -222,6 +473,30 @@ ipcMain.handle("db:connect", async (event, config) => {
       pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
     };
 
+    let sessionCount = 0;
+
+    if (!config.saveConnection) {
+      const localPool = await new sql.ConnectionPool(dbConfig).connect();
+      try {
+        const result = await localPool.request().query(`
+          SELECT COUNT(*) as Count 
+          FROM sys.dm_exec_sessions 
+          WHERE is_user_process = 1 AND database_id = DB_ID()
+        `);
+        sessionCount = result.recordset[0].Count;
+      } catch (err) {
+        console.error("Session count fetch error:", err);
+      }
+      await localPool.close();
+
+      return {
+        success: true,
+        message: "Bağlantı başarılı!",
+        activeSessions: sessionCount
+      };
+    }
+
+    if (pool) await pool.close();
     pool = await sql.connect(dbConfig);
 
     if (config.saveConnection) {
@@ -236,7 +511,11 @@ ipcMain.handle("db:connect", async (event, config) => {
       });
     }
 
-    return { success: true, message: "Bağlantı başarılı!" };
+    return {
+      success: true,
+      message: "Bağlantı başarılı!",
+      activeSessions: sessionCount
+    };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -266,8 +545,8 @@ ipcMain.handle("db:disconnect", async () => {
 
 ipcMain.handle("db:getTables", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(`
+    const activePool = await ensurePool();
+    const result = await activePool.request().query(`
       SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
       FROM INFORMATION_SCHEMA.TABLES
       WHERE TABLE_TYPE = 'BASE TABLE' 
@@ -284,15 +563,14 @@ ipcMain.handle(
   "db:getTableData",
   async (event, { tableName, top, whereClause, orderBy, joins = [] }) => {
     try {
-      if (!pool) throw new Error("Veritabanı bağlantısı yok");
+      const activePool = await ensurePool();
 
-      const colResult = await pool.request().query(`
+      const colResult = await activePool.request().query(`
         SELECT COLUMN_NAME, DATA_TYPE 
         FROM INFORMATION_SCHEMA.COLUMNS 
         WHERE TABLE_NAME = '${tableName}'
       `);
 
-      // Helper function to get columns with or without aliases
       const getColumnsWithAlias = (targetTable, colList, useAlias) => {
         return colList.map((col) => {
           const type = col.DATA_TYPE.toLowerCase();
@@ -323,8 +601,7 @@ ipcMain.handle(
           const type = j.type || "INNER JOIN";
           joinSql += ` ${type} [${j.targetTable}] ON [${tableName}].[${j.localColumn}] = [${j.targetTable}].[${j.targetColumn}]`;
 
-          // Fetch columns for the joined table
-          const joinColResult = await pool.request().query(`
+          const joinColResult = await activePool.request().query(`
             SELECT COLUMN_NAME, DATA_TYPE 
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = '${j.targetTable}'
@@ -341,7 +618,7 @@ ipcMain.handle(
       const order = orderBy ? `ORDER BY ${orderBy}` : "";
 
       const query = `SELECT ${topClause} ${finalSelect} FROM [${tableName}] ${joinSql} ${where} ${order}`;
-      const result = await pool.request().query(query);
+      const result = await activePool.request().query(query);
 
       const serialized = serializeData(result.recordset);
       return { success: true, data: serialized };
@@ -354,8 +631,8 @@ ipcMain.handle(
 
 ipcMain.handle("db:getTableColumns", async (event, tableName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(`
+    const activePool = await ensurePool();
+    const result = await activePool.request().query(`
       SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT,
       COLUMNPROPERTY(OBJECT_ID(TABLE_SCHEMA + '.' + TABLE_NAME), COLUMN_NAME, 'IsIdentity') as IS_IDENTITY
       FROM INFORMATION_SCHEMA.COLUMNS
@@ -372,11 +649,11 @@ ipcMain.handle(
   "db:updateRecord",
   async (event, { tableName, idColumn, idValue, newData }) => {
     try {
-      if (!pool) throw new Error("Veritabanı bağlantısı yok");
+      const activePool = await ensurePool();
 
-      const request = pool.request();
+      const request = activePool.request();
 
-      const colMetaResult = await pool.request().query(`
+      const colMetaResult = await activePool.request().query(`
       SELECT COLUMN_NAME, DATA_TYPE 
       FROM INFORMATION_SCHEMA.COLUMNS 
       WHERE TABLE_NAME = '${tableName}'
@@ -437,8 +714,8 @@ ipcMain.handle(
 
 ipcMain.handle("db:getViews", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(`
+    const activePool = await ensurePool();
+    const result = await activePool.request().query(`
       SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS ORDER BY TABLE_NAME
     `);
     const serialized = serializeData(result.recordset);
@@ -450,8 +727,8 @@ ipcMain.handle("db:getViews", async () => {
 
 ipcMain.handle("db:getViewDefinition", async (event, viewName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(`
+    const activePool = await ensurePool();
+    const result = await activePool.request().query(`
       SELECT OBJECT_DEFINITION(OBJECT_ID('${viewName}')) as definition
     `);
     return { success: true, data: result.recordset[0]?.definition };
@@ -462,8 +739,8 @@ ipcMain.handle("db:getViewDefinition", async (event, viewName) => {
 
 ipcMain.handle("db:getStoredProcedures", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(`
+    const activePool = await ensurePool();
+    const result = await activePool.request().query(`
       SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_DEFINITION
       FROM INFORMATION_SCHEMA.ROUTINES
       WHERE ROUTINE_TYPE = 'PROCEDURE' ORDER BY ROUTINE_NAME
@@ -477,8 +754,8 @@ ipcMain.handle("db:getStoredProcedures", async () => {
 
 ipcMain.handle("db:getSPParameters", async (event, spName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const result = await pool.request().query(`
+    const activePool = await ensurePool();
+    const result = await activePool.request().query(`
       SELECT PARAMETER_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, PARAMETER_MODE
       FROM INFORMATION_SCHEMA.PARAMETERS
       WHERE SPECIFIC_NAME = '${spName}' ORDER BY ORDINAL_POSITION
@@ -491,8 +768,8 @@ ipcMain.handle("db:getSPParameters", async (event, spName) => {
 
 ipcMain.handle("db:executeSP", async (event, { spName, parameters }) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const request = pool.request();
+    const activePool = await ensurePool();
+    const request = activePool.request();
     for (const param of parameters) {
       request.input(param.name.replace("@", ""), sql[param.type], param.value);
     }
@@ -510,12 +787,11 @@ ipcMain.handle("db:executeSP", async (event, { spName, parameters }) => {
 
 ipcMain.handle("db:executeQuery", async (event, query) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const request = pool.request();
+    const request = activePool.request();
     let messages = [];
 
-    // Capture PRINT and low-severity RAISERROR messages
     request.on('info', (info) => {
       messages.push({
         message: info.message,
@@ -613,7 +889,7 @@ async function ensureTenantsDir() {
   }
 }
 
-ipcMain.handle("fs:readTenants", async () => {
+async function loadAllTenantsInternal() {
   try {
     await ensureTenantsDir();
     const tenantsDirPath = getTenantsDirPath();
@@ -633,10 +909,55 @@ ipcMain.handle("fs:readTenants", async () => {
             password: security.decrypt(db.password)
           }));
         }
+        if (tenant.windowsServers) {
+          tenant.windowsServers = tenant.windowsServers.map(srv => ({
+            ...srv,
+            password: security.decrypt(srv.password)
+          }));
+        }
         return tenant;
       }),
     );
+    return tenants;
+  } catch (error) {
+    console.error("loadAllTenantsInternal hatası:", error);
+    return [];
+  }
+}
 
+async function initGlobalMonitoring() {
+  console.log("Global monitoring başlatılıyor...");
+  const tenants = await loadAllTenantsInternal();
+  let serverCount = 0;
+  let dbCount = 0;
+
+  for (const tenant of tenants) {
+    const tenantInfo = { name: tenant.name, shortName: tenant.shortName, color: tenant.color };
+
+    if (tenant.windowsServers && tenant.windowsServers.length > 0) {
+      for (const server of tenant.windowsServers) {
+        if (!server.excludeFromMonitoring) {
+          MonitoringService.start({ ...server, type: 'windowsServer', tenantInfo });
+          serverCount++;
+        }
+      }
+    }
+
+    if (tenant.databases && tenant.databases.length > 0) {
+      for (const db of tenant.databases) {
+        if (!db.excludeFromMonitoring) {
+          MonitoringService.start({ ...db, type: 'database', tenantInfo });
+          dbCount++;
+        }
+      }
+    }
+  }
+  console.log(`Global İzleme: ${serverCount} sunucu ve ${dbCount} veritabanı arka planda izleniyor.`);
+}
+
+ipcMain.handle("fs:readTenants", async () => {
+  try {
+    const tenants = await loadAllTenantsInternal();
     return { success: true, data: tenants };
   } catch (error) {
     console.error("Ortamlar okunurken hata:", error);
@@ -657,8 +978,15 @@ ipcMain.handle("fs:saveTenant", async (event, tenantData) => {
         password: security.encrypt(db.password)
       }));
     }
+    if (dataToSave.windowsServers) {
+      dataToSave.windowsServers = dataToSave.windowsServers.map(srv => ({
+        ...srv,
+        password: security.encrypt(srv.password)
+      }));
+    }
 
     await fs.writeFile(filePath, JSON.stringify(dataToSave, null, 2));
+    if (mainWindow) mainWindow.webContents.send("tenants-updated");
     return { success: true };
   } catch (error) {
     console.error("Ortam kaydedilirken hata:", error);
@@ -671,6 +999,7 @@ ipcMain.handle("fs:deleteTenant", async (event, tenantId) => {
     const tenantsDirPath = getTenantsDirPath();
     const filePath = path.join(tenantsDirPath, `${tenantId}.json`);
     await fs.unlink(filePath);
+    if (mainWindow) mainWindow.webContents.send("tenants-updated");
     return { success: true };
   } catch (error) {
     console.error("Ortam silinirken hata:", error);
@@ -680,9 +1009,9 @@ ipcMain.handle("fs:deleteTenant", async (event, tenantId) => {
 
 ipcMain.handle("db:getActivity", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const result = await pool.request().query(`
+    const result = await activePool.request().query(`
       SELECT 
         s.session_id AS [SPID],
         DB_NAME(s.database_id) AS [DB Name],
@@ -715,9 +1044,9 @@ ipcMain.handle("db:getActivity", async () => {
 
 ipcMain.handle("db:getServerHealth", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const cpuResult = await pool.request().query(`
+    const cpuResult = await activePool.request().query(`
       SELECT TOP 1 
         record.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS [SQLCPU]
       FROM (
@@ -728,7 +1057,7 @@ ipcMain.handle("db:getServerHealth", async () => {
       ORDER BY TIMESTAMP DESC
     `);
 
-    const diskResult = await pool.request().query(`
+    const diskResult = await activePool.request().query(`
       SELECT DISTINCT
         dovs.volume_mount_point AS [Drive],
         CAST(dovs.available_bytes * 1.0 / 1024 / 1024 / 1024 AS DECIMAL(10,2)) AS [FreeGB],
@@ -750,9 +1079,9 @@ ipcMain.handle("db:getServerHealth", async () => {
 
 ipcMain.handle("db:getTableRelations", async (event, tableName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const result = await pool.request().query(`
+    const result = await activePool.request().query(`
       SELECT 
         obj.name AS ForeignKeyName,
         sch.name AS SchemaName,
@@ -779,9 +1108,9 @@ ipcMain.handle("db:getTableRelations", async (event, tableName) => {
 
 ipcMain.handle("db:getFragmentedIndexes", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const indexesResult = await pool.request().query(`
+    const indexesResult = await activePool.request().query(`
       SELECT 
         OBJECT_NAME(ips.OBJECT_ID) AS TableName, 
         i.name AS IndexName, 
@@ -795,7 +1124,7 @@ ipcMain.handle("db:getFragmentedIndexes", async () => {
       ORDER BY ips.avg_fragmentation_in_percent DESC
     `);
 
-    const healthResult = await pool.request().query(`
+    const healthResult = await activePool.request().query(`
       SELECT ROUND(100 - ISNULL(AVG(avg_fragmentation_in_percent), 0), 2) AS HealthScore
       FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, 'LIMITED')
       WHERE page_count > 50 AND index_id > 0
@@ -821,11 +1150,11 @@ ipcMain.handle(
   "db:fixIndex",
   async (event, { tableName, indexName, fragmentation }) => {
     try {
-      if (!pool) throw new Error("Veritabanı bağlantısı yok");
+      const activePool = await ensurePool();
 
       const action = fragmentation >= 30 ? "REBUILD" : "REORGANIZE";
       const query = `ALTER INDEX [${indexName}] ON [${tableName}] ${action}`;
-      await pool.request().query(query);
+      await activePool.request().query(query);
 
       const statQuery = `
       SELECT ROUND(ips.avg_fragmentation_in_percent, 2) AS NewFragmentation
@@ -833,10 +1162,10 @@ ipcMain.handle(
       INNER JOIN sys.indexes i ON ips.object_id = i.object_id AND ips.index_id = i.index_id
       WHERE i.name = '${indexName}'
     `;
-      const statResult = await pool.request().query(statQuery);
+      const statResult = await activePool.request().query(statQuery);
       const newFrag = statResult.recordset[0]?.NewFragmentation || 0;
 
-      const healthResult = await pool.request().query(`
+      const healthResult = await activePool.request().query(`
       SELECT ROUND(100 - ISNULL(AVG(avg_fragmentation_in_percent), 0), 2) AS HealthScore
       FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, 'LIMITED')
       WHERE page_count > 50 AND index_id > 0
@@ -858,9 +1187,9 @@ ipcMain.handle(
 
 ipcMain.handle("db:getDbSpaceInfo", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const request = pool.request();
+    const request = activePool.request();
 
     const filesResult = await request.query(`
       SELECT 
@@ -902,9 +1231,9 @@ ipcMain.handle("db:getDbSpaceInfo", async () => {
 
 ipcMain.handle("db:shrinkLogFile", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
 
-    const request = pool.request();
+    const request = activePool.request();
 
     const dbInfoResult = await request.query(`
       SELECT DB_NAME() AS DbName, recovery_model_desc AS RecoveryModel 
@@ -939,8 +1268,8 @@ ipcMain.handle("db:shrinkLogFile", async () => {
 
 ipcMain.handle("db:getStatisticsInfo", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    const request = pool.request();
+    const activePool = await ensurePool();
+    const request = activePool.request();
 
     const result = await request.query(`
       SELECT 
@@ -988,8 +1317,8 @@ ipcMain.handle("db:getStatisticsInfo", async () => {
 
 ipcMain.handle("db:updateTableStatistics", async (event, tableName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    await pool.request().query(`UPDATE STATISTICS [${tableName}]`);
+    const activePool = await ensurePool();
+    await activePool.request().query(`UPDATE STATISTICS [${tableName}]`);
     return {
       success: true,
       message: `[${tableName}] tablosunun veri haritası (istatistiği) güncellendi.`,
@@ -1001,8 +1330,8 @@ ipcMain.handle("db:updateTableStatistics", async (event, tableName) => {
 
 ipcMain.handle("db:updateAllStatistics", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    await pool.request().query("EXEC sp_updatestats");
+    const activePool = await ensurePool();
+    await activePool.request().query("EXEC sp_updatestats");
     return {
       success: true,
       message:
@@ -1015,7 +1344,7 @@ ipcMain.handle("db:updateAllStatistics", async () => {
 
 ipcMain.handle("db:getSqlJobs", async () => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
     const query = `
       SELECT j.job_id as JobId, j.name AS JobName, j.enabled AS IsEnabled, j.description AS Description,
           ISNULL((SELECT TOP 1 CASE WHEN stop_execution_date IS NULL AND start_execution_date IS NOT NULL THEN 1 ELSE 0 END
@@ -1023,7 +1352,7 @@ ipcMain.handle("db:getSqlJobs", async () => {
           (SELECT TOP 1 h.run_status FROM msdb.dbo.sysjobhistory h WHERE h.job_id = j.job_id AND h.step_id = 0 ORDER BY h.run_date DESC, h.run_time DESC) AS LastRunStatus 
       FROM msdb.dbo.sysjobs j ORDER BY j.name ASC;
     `;
-    const result = await pool.request().query(query);
+    const result = await activePool.request().query(query);
     const serialized = serializeData(result.recordset);
     return { success: true, data: serialized };
   } catch (error) {
@@ -1033,10 +1362,10 @@ ipcMain.handle("db:getSqlJobs", async () => {
 
 ipcMain.handle("db:executeJobAction", async (event, { jobName, action }) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
     const proc =
       action === "start" ? "msdb.dbo.sp_start_job" : "msdb.dbo.sp_stop_job";
-    await pool.request().input("job_name", sql.NVarChar, jobName).execute(proc);
+    await activePool.request().input("job_name", sql.NVarChar, jobName).execute(proc);
     return {
       success: true,
       message: `Görev başarıyla ${action === "start" ? "başlatıldı" : "durduruldu"}.`,
@@ -1048,8 +1377,8 @@ ipcMain.handle("db:executeJobAction", async (event, { jobName, action }) => {
 
 ipcMain.handle("db:toggleSqlJob", async (event, { jobName, enabled }) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
-    await pool
+    const activePool = await ensurePool();
+    await activePool
       .request()
       .input("job_name", sql.NVarChar, jobName)
       .input("enabled", sql.TinyInt, enabled ? 1 : 0)
@@ -1062,13 +1391,13 @@ ipcMain.handle("db:toggleSqlJob", async (event, { jobName, enabled }) => {
 
 ipcMain.handle("db:getSqlJobHistory", async (event, jobName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
     const query = `
       SELECT TOP 50 h.step_id AS StepId, h.step_name AS StepName, h.run_status AS RunStatus, h.message AS Message, h.run_date AS RunDate, h.run_time AS RunTime, h.run_duration AS Duration
       FROM msdb.dbo.sysjobhistory h INNER JOIN msdb.dbo.sysjobs j ON h.job_id = j.job_id
       WHERE j.name = @jobName ORDER BY h.run_date DESC, h.run_time DESC
     `;
-    const result = await pool
+    const result = await activePool
       .request()
       .input("jobName", sql.NVarChar, jobName)
       .query(query);
@@ -1081,9 +1410,9 @@ ipcMain.handle("db:getSqlJobHistory", async (event, jobName) => {
 
 ipcMain.handle("db:getSqlJobDetails", async (event, jobName) => {
   try {
-    if (!pool) throw new Error("Veritabanı bağlantısı yok");
+    const activePool = await ensurePool();
     const stepsQuery = `SELECT step_id as StepId, step_name as StepName, subsystem as Subsystem, command as Command, database_name as DatabaseName FROM msdb.dbo.sysjobsteps WHERE job_id = (SELECT job_id FROM msdb.dbo.sysjobs WHERE name = @jobName) ORDER BY step_id ASC`;
-    const stepsResult = await pool
+    const stepsResult = await activePool
       .request()
       .input("jobName", sql.NVarChar, jobName)
       .query(stepsQuery);
@@ -1107,8 +1436,8 @@ ipcMain.handle("db:getSqlJobDetails", async (event, jobName) => {
 
 ipcMain.handle("db:getCurrentDbName", async () => {
   try {
-    if (!pool) throw new Error("Bağlantı yok");
-    const result = await pool.request().query("SELECT DB_NAME() AS currentDb");
+    const activePool = await ensurePool();
+    const result = await activePool.request().query("SELECT DB_NAME() AS currentDb");
     return { success: true, data: result.recordset[0].currentDb };
   } catch (error) {
     return { success: false, message: error.message };
@@ -1119,7 +1448,7 @@ ipcMain.handle(
   "db:saveJobMaster",
   async (event, { isEdit, originalName, jobData }) => {
     try {
-      if (!pool) throw new Error("Veritabanı bağlantısı yok");
+      const activePool = await ensurePool();
 
       const safeName = jobData.name.replace(/'/g, "''");
       const safeDesc = jobData.description.replace(/'/g, "''");
@@ -1130,35 +1459,35 @@ ipcMain.handle(
       if (isEdit) {
         const safeOrig = originalName.replace(/'/g, "''");
         masterQuery += `
-        SELECT @jobId = job_id FROM msdb.dbo.sysjobs WHERE name = N'${safeOrig}';
-        
-        EXEC msdb.dbo.sp_update_job 
-            @job_id = @jobId, 
-            @new_name = N'${safeName}', 
-            @description = N'${safeDesc}', 
-            @enabled = ${isEnabled};
-            
-        DECLARE @maxStep INT = ${jobData.steps.length};
-        DECLARE @delStep INT;
-        
-        WHILE (SELECT ISNULL(MAX(step_id), 0) FROM msdb.dbo.sysjobsteps WHERE job_id = @jobId) > @maxStep 
-        BEGIN
-            SET @delStep = (SELECT MAX(step_id) FROM msdb.dbo.sysjobsteps WHERE job_id = @jobId);
-            EXEC msdb.dbo.sp_delete_jobstep @job_id = @jobId, @step_id = @delStep;
-        END;
-      `;
+      SELECT @jobId = job_id FROM msdb.dbo.sysjobs WHERE name = N'${safeOrig}';
+      
+      EXEC msdb.dbo.sp_update_job 
+          @job_id = @jobId, 
+          @new_name = N'${safeName}', 
+          @description = N'${safeDesc}', 
+          @enabled = ${isEnabled};
+          
+      DECLARE @maxStep INT = ${jobData.steps.length};
+      DECLARE @delStep INT;
+      
+      WHILE (SELECT ISNULL(MAX(step_id), 0) FROM msdb.dbo.sysjobsteps WHERE job_id = @jobId) > @maxStep 
+      BEGIN
+          SET @delStep = (SELECT MAX(step_id) FROM msdb.dbo.sysjobsteps WHERE job_id = @jobId);
+          EXEC msdb.dbo.sp_delete_jobstep @job_id = @jobId, @step_id = @delStep;
+      END;
+    `;
       } else {
         masterQuery += `
-        EXEC msdb.dbo.sp_add_job 
-            @job_name = N'${safeName}', 
-            @description = N'${safeDesc}', 
-            @enabled = ${isEnabled}, 
-            @job_id = @jobId OUTPUT;
-            
-        EXEC msdb.dbo.sp_add_jobserver 
-            @job_id = @jobId, 
-            @server_name = @@SERVERNAME;
-      `;
+      EXEC msdb.dbo.sp_add_job 
+          @job_name = N'${safeName}', 
+          @description = N'${safeDesc}', 
+          @enabled = ${isEnabled}, 
+          @job_id = @jobId OUTPUT;
+          
+      EXEC msdb.dbo.sp_add_jobserver 
+          @job_id = @jobId, 
+          @server_name = @@SERVERNAME;
+    `;
       }
 
       jobData.steps.forEach((step, idx) => {
@@ -1167,71 +1496,70 @@ ipcMain.handle(
         const sCmd = step.cmd.replace(/'/g, "''");
 
         masterQuery += `
-        IF EXISTS (SELECT 1 FROM msdb.dbo.sysjobsteps WHERE job_id = @jobId AND step_id = ${idx + 1})
-        BEGIN
-            EXEC msdb.dbo.sp_update_jobstep 
-                @job_id = @jobId, 
-                @step_id = ${idx + 1}, 
-                @step_name = N'${sName}', 
-                @command = N'${sCmd}', 
-                @database_name = N'${sDb}';
-        END
-        ELSE 
-        BEGIN
-            EXEC msdb.dbo.sp_add_jobstep 
-                @job_id = @jobId, 
-                @step_name = N'${sName}', 
-                @step_id = ${idx + 1}, 
-                @subsystem = N'TSQL', 
-                @command = N'${sCmd}', 
-                @database_name = N'${sDb}';
-        END;
-      `;
+      IF EXISTS (SELECT 1 FROM msdb.dbo.sysjobsteps WHERE job_id = @jobId AND step_id = ${idx + 1})
+      BEGIN
+          EXEC msdb.dbo.sp_update_jobstep 
+              @job_id = @jobId, 
+              @step_id = ${idx + 1}, 
+              @step_name = N'${sName}', 
+              @command = N'${sCmd}', 
+              @database_name = N'${sDb}';
+      END
+      ELSE 
+      BEGIN
+          EXEC msdb.dbo.sp_add_jobstep 
+              @job_id = @jobId, 
+              @step_name = N'${sName}', 
+              @step_id = ${idx + 1}, 
+              @subsystem = N'TSQL', 
+              @command = N'${sCmd}', 
+              @database_name = N'${sDb}';
+      END;
+    `;
       });
 
       masterQuery += `
-        DECLARE @schedId INT; 
-        DECLARE curSched CURSOR LOCAL FAST_FORWARD FOR 
-            SELECT schedule_id FROM msdb.dbo.sysjobschedules WHERE job_id = @jobId;
-            
-        OPEN curSched; 
-        FETCH NEXT FROM curSched INTO @schedId; 
-        
-        WHILE @@FETCH_STATUS = 0 
-        BEGIN
-            EXEC msdb.dbo.sp_detach_schedule @job_id = @jobId, @schedule_id = @schedId; 
-            FETCH NEXT FROM curSched INTO @schedId;
-        END; 
-        
-        CLOSE curSched; 
-        DEALLOCATE curSched;
-    `;
+      DECLARE @schedId INT; 
+      DECLARE curSched CURSOR LOCAL FAST_FORWARD FOR 
+          SELECT schedule_id FROM msdb.dbo.sysjobschedules WHERE job_id = @jobId;
+          
+      OPEN curSched; 
+      FETCH NEXT FROM curSched INTO @schedId; 
+      
+      WHILE @@FETCH_STATUS = 0 
+      BEGIN
+          EXEC msdb.dbo.sp_detach_schedule @job_id = @jobId, @schedule_id = @schedId; 
+          FETCH NEXT FROM curSched INTO @schedId;
+      END; 
+      
+      CLOSE curSched; 
+      DEALLOCATE curSched;
+  `;
 
       jobData.schedules.forEach((sch, idx) => {
         if (!sch.enabled) return;
         const timeInt = parseInt(sch.time.replace(":", "") + "00");
 
         masterQuery += `
-        EXEC msdb.dbo.sp_add_schedule 
-            @schedule_name = N'${safeName}_S_${idx}', 
-            @freq_type = ${sch.freqType}, 
-            @freq_interval = ${sch.freqInterval}, 
-            @active_start_time = ${timeInt};
-            
-        EXEC msdb.dbo.sp_attach_schedule 
-            @job_id = @jobId, 
-            @schedule_name = N'${safeName}_S_${idx}';
-      `;
+      EXEC msdb.dbo.sp_add_schedule 
+          @schedule_name = N'${safeName}_S_${idx}', 
+          @freq_type = ${sch.freqType}, 
+          @freq_interval = ${sch.freqInterval}, 
+          @active_start_time = ${timeInt};
+          
+      EXEC msdb.dbo.sp_attach_schedule 
+          @job_id = @jobId, 
+          @schedule_name = N'${safeName}_S_${idx}';
+    `;
       });
 
-      await pool.request().query(masterQuery);
+      await activePool.request().query(masterQuery);
       return { success: true, message: "Görev başarıyla kaydedildi." };
     } catch (error) {
       console.error("Job Kaydetme Hatası:", error);
       return { success: false, message: error.message };
     }
-  }
-
+  },
 );
 
 ipcMain.handle("win:testConnection", async (event, config) => {
@@ -1327,7 +1655,7 @@ ipcMain.handle("win:getPerformanceStats", async (event, config) => {
 ipcMain.handle("win:getServices", async (event, config) => {
   return new Promise((resolve) => {
     const conn = new Client();
-    const command = `powershell.exe -NoProfile -Command "Get-Service | Select-Object Name, DisplayName, Status | ConvertTo-Json"`;
+    const command = `powershell.exe -NoProfile -Command "$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Service | Select-Object Name, DisplayName, Status | ConvertTo-Json -Compress"`;
 
     conn.on("ready", () => {
       conn.exec(command, (err, stream) => {
@@ -1336,21 +1664,224 @@ ipcMain.handle("win:getServices", async (event, config) => {
         stream.on("close", () => {
           conn.end();
           try { resolve({ success: true, data: JSON.parse(data.trim()) }); }
-          catch (e) { resolve({ success: false, message: "Data parse error" }); }
+          catch (e) { resolve({ success: false, message: "Data parse error: " + e.message }); }
+        }).on("data", (d) => { data += d.toString('utf8'); });
+      });
+    }).on("error", (err) => resolve({ success: false, message: err.message }))
+      .connect({ host: config.host, port: 22, username: config.username || config.user, password: config.password, readyTimeout: 10000 });
+  });
+});
+
+ipcMain.handle("win:startService", async (event, { config, serviceName }) => {
+  return new Promise((resolve) => {
+    const conn = new Client();
+    const command = `powershell.exe -NoProfile -Command "Start-Service -Name '${serviceName}'; if ($?) { Write-Output 'Success' } else { Write-Output 'Failed' }"`;
+
+    conn.on("ready", () => {
+      conn.exec(command, (err, stream) => {
+        if (err) { conn.end(); return resolve({ success: false, message: err.message }); }
+        let data = "";
+        stream.on("close", () => {
+          conn.end();
+          resolve({ success: true, message: `Service ${serviceName} started.` });
         }).on("data", (d) => { data += d.toString(); });
       });
     }).on("error", (err) => resolve({ success: false, message: err.message }))
       .connect({ host: config.host, port: 22, username: config.username || config.user, password: config.password, readyTimeout: 10000 });
   });
 });
-// --- Monitoring Service ---
+
+ipcMain.handle("win:stopService", async (event, { config, serviceName }) => {
+  return new Promise((resolve) => {
+    const conn = new Client();
+    const command = `powershell.exe -NoProfile -Command "Stop-Service -Name '${serviceName}' -Force; if ($?) { Write-Output 'Success' } else { Write-Output 'Failed' }"`;
+
+    conn.on("ready", () => {
+      conn.exec(command, (err, stream) => {
+        if (err) { conn.end(); return resolve({ success: false, message: err.message }); }
+        let data = "";
+        stream.on("close", () => {
+          conn.end();
+          resolve({ success: true, message: `Service ${serviceName} stopped.` });
+        }).on("data", (d) => { data += d.toString(); });
+      });
+    }).on("error", (err) => resolve({ success: false, message: err.message }))
+      .connect({ host: config.host, port: 22, username: config.username || config.user, password: config.password, readyTimeout: 10000 });
+  });
+});
+
+ipcMain.handle("win:toggleServiceWatch", async (event, { tenantId, serverId, serviceName, watch }) => {
+  try {
+    const tenantsDirPath = getTenantsDirPath();
+    const filePath = path.join(tenantsDirPath, `${tenantId}.json`);
+    const content = await fs.readFile(filePath, "utf-8");
+    const tenant = JSON.parse(content);
+
+    const serverIndex = tenant.windowsServers.findIndex(s => (s.id || s.host) === serverId);
+    if (serverIndex !== -1) {
+      const server = tenant.windowsServers[serverIndex];
+      if (!server.watchedServices) server.watchedServices = [];
+
+      if (watch && !server.watchedServices.includes(serviceName)) {
+        server.watchedServices.push(serviceName);
+      } else if (!watch) {
+        server.watchedServices = server.watchedServices.filter(s => s !== serviceName);
+      }
+
+      await fs.writeFile(filePath, JSON.stringify(tenant, null, 2));
+
+      const sess = MonitoringService.sessions.get(serverId);
+      if (sess && sess.config) {
+        sess.config.watchedServices = server.watchedServices;
+      }
+
+      if (mainWindow) mainWindow.webContents.send("tenants-updated");
+      return { success: true };
+    }
+    return { success: false, message: "Server not found in tenant." };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+});
+
+ipcMain.handle("win:startTerminalSession", async (event, serverId, config) => {
+  try {
+    const conn = await MonitoringService.getConnection(serverId, config);
+    if (!conn) throw new Error("Could not connect to server");
+
+    return new Promise((resolve) => {
+      conn.shell({ term: 'xterm-256color' }, (err, stream) => {
+        if (err) {
+          resolve({ success: false, message: err.message });
+          return;
+        }
+
+        activeTerminals.set(serverId, stream);
+
+        stream.on('data', (data) => {
+          if (mainWindow) {
+            mainWindow.webContents.send(`terminal:data:${serverId}`, data.toString());
+          }
+        });
+
+        stream.on('close', () => {
+          activeTerminals.delete(serverId);
+        });
+
+        resolve({ success: true });
+      });
+    });
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+});
+
+ipcMain.handle("win:terminalInput", (event, serverId, input) => {
+  const stream = activeTerminals.get(serverId);
+  if (stream) {
+    stream.write(input);
+    return { success: true };
+  }
+  console.log(`[Terminal] No active stream for ${serverId}`);
+  return { success: false, message: "No active terminal session" };
+});
+
+ipcMain.handle("win:resizeTerminal", (event, serverId, cols, rows) => {
+  const stream = activeTerminals.get(serverId);
+  if (stream) {
+    stream.setWindow(rows, cols, 0, 0);
+    return { success: true };
+  }
+  return { success: false, message: "No active terminal session" };
+});
+
+ipcMain.handle("win:stopTerminalSession", (event, serverId) => {
+  const stream = activeTerminals.get(serverId);
+  if (stream) {
+    stream.end();
+    activeTerminals.delete(serverId);
+    return { success: true };
+  }
+  return { success: false, message: "No active terminal session" };
+});
+
 const ts = () => new Date().toLocaleTimeString('tr-TR', { hour12: false }) + '.' + new Date().getMilliseconds().toString().padStart(3, '0');
 
 const MonitoringService = {
-  sessions: new Map(), // serverId -> { interval, data, config, lastSync, preferredInterval }
+  sessions: new Map(),
   dataLimit: 30000,
   syncInterval: 60000 * 5, // 5 min
   isAppFocused: true,
+
+  pendingNotifications: [],
+  notificationTimer: null,
+
+  queueNotification(type, isInitialFailure, serverName, serverId) {
+    this.pendingNotifications.push({ type, isInitialFailure, serverName, serverId });
+    if (this.notificationTimer) clearTimeout(this.notificationTimer);
+
+    this.notificationTimer = setTimeout(() => {
+      this.flushNotifications();
+    }, 1500);
+  },
+
+  flushNotifications() {
+    const queue = [...this.pendingNotifications];
+    this.pendingNotifications = [];
+    if (queue.length === 0) return;
+
+    const lang = store.get('config')?.ui?.language || 'tr';
+
+    const groups = {};
+    queue.forEach(q => {
+      const key = `${q.type}-${q.isInitialFailure ? 'initial' : 'repeat'}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(q);
+    });
+
+    for (const [key, items] of Object.entries(groups)) {
+      const [type, state] = key.split('-');
+      const isInitial = state === 'initial';
+      const names = [...new Set(items.map(i => i.serverName))].join(", ");
+
+      let osTitle = "", osBody = "", appTitleKey = "", appBodyKey = "", notificationData = {};
+
+      if (items.length === 1) {
+        const item = items[0];
+        notificationData = { name: item.serverName };
+        if (type === 'database') {
+          osTitle = lang === 'en' ? (isInitial ? "Database Connection Lost" : "Database Disconnected") : (isInitial ? "Veritabanı Bağlantısı Koptu" : "Veritabanı Bağlantısı Yok");
+          osBody = lang === 'en' ? `${item.serverName} database is unreachable.` : `${item.serverName} veritabanına ulaşılamıyor.`;
+          appTitleKey = isInitial ? "notifications.dbOffline.title" : "notifications.dbDisconnected.title";
+          appBodyKey = isInitial ? "notifications.dbOffline.body" : "notifications.dbDisconnected.body";
+        } else {
+          osTitle = lang === 'en' ? (isInitial ? "Server Connection Lost" : "Server Disconnected") : (isInitial ? "Sunucu Bağlantısı Koptu" : "Sunucu Bağlantısı Yok");
+          osBody = lang === 'en' ? `${item.serverName} server is unreachable.` : `${item.serverName} sunucusuna ulaşılamıyor.`;
+          appTitleKey = isInitial ? "notifications.serverOffline.title" : "notifications.serverDisconnected.title";
+          appBodyKey = isInitial ? "notifications.serverOffline.body" : "notifications.serverDisconnected.body";
+        }
+        addAppNotification({ titleKey: appTitleKey, bodyKey: appBodyKey, data: notificationData, type: "error", serverId: type === 'windowsServer' ? item.serverId : null });
+      } else {
+        notificationData = { names: names, count: items.length };
+        if (type === 'database') {
+          osTitle = lang === 'en' ? `${items.length} Databases Disconnected` : `${items.length} Veritabanı Bağlantısı Koptu`;
+          osBody = lang === 'en' ? `The following databases are unreachable: ${names}` : `Şu veritabanlarına ulaşılamıyor: ${names}`;
+          appTitleKey = isInitial ? "notifications.dbOfflineBatched.title" : "notifications.dbDisconnectedBatched.title";
+          appBodyKey = isInitial ? "notifications.dbOfflineBatched.body" : "notifications.dbDisconnectedBatched.body";
+        } else {
+          osTitle = lang === 'en' ? `${items.length} Servers Disconnected` : `${items.length} Sunucu Bağlantısı Koptu`;
+          osBody = lang === 'en' ? `The following servers are unreachable: ${names}` : `Şu sunuculara ulaşılamıyor: ${names}`;
+          appTitleKey = isInitial ? "notifications.serverOfflineBatched.title" : "notifications.serverDisconnectedBatched.title";
+          appBodyKey = isInitial ? "notifications.serverOfflineBatched.body" : "notifications.serverDisconnectedBatched.body";
+        }
+        addAppNotification({ titleKey: appTitleKey, bodyKey: appBodyKey, data: notificationData, type: "error", serverId: null });
+      }
+
+      if (!this.isAppFocused || isInitial) {
+        new Notification({ title: osTitle, body: osBody }).show();
+      }
+    }
+  },
 
   async getLogPath(serverId, dateStr) {
     const basePath = getBasePath();
@@ -1361,27 +1892,24 @@ const MonitoringService = {
     const basePath = getBasePath();
     const targetDir = path.join(basePath, "monitoring");
     const dates = new Set();
-    
+
     try {
       const files = await fs.readdir(targetDir);
       for (const file of files) {
-        // Daily file match: stats_serverId_YYYY-MM-DD.json
         const dailyMatch = file.match(new RegExp(`^stats_${serverId}_(\\d{4}-\\d{2}-\\d{2})\\.json$`));
         if (dailyMatch) {
           dates.add(dailyMatch[1]);
         }
-        
-        // Legacy file match: stats_serverId.json
+
         if (file === `stats_${serverId}.json`) {
-          // Provide an approximation limit (today) so history UI works immediately instead of scanning massive DB
+
           dates.add(new Date().toISOString().split('T')[0]);
         }
       }
-    } catch(e) {
+    } catch (e) {
       console.warn(`[getAvailableDates] Failed to read monitoring dir for ${serverId}:`, e);
     }
-    
-    // Convert to sorted array
+
     return Array.from(dates).sort();
   },
 
@@ -1389,33 +1917,32 @@ const MonitoringService = {
     try {
       const targetDate = dateStr || new Date().toISOString().split('T')[0];
       const logPath = await this.getLogPath(serverId, targetDate);
-      
+
       let content;
       try {
         content = await fs.readFile(logPath, "utf-8");
       } catch (err) {
-        // If the daily file doesn't exist yet, attempt to load the legacy monolithic file
+
         const basePath = getBasePath();
         const legacyPath = path.join(basePath, "monitoring", `stats_${serverId}.json`);
         try {
           content = await fs.readFile(legacyPath, "utf-8");
           const legacyData = JSON.parse(content);
-          
-          // Try to migrate legacy data into grouped structure so it works nicely in UI
+
           const results = [];
           legacyData.forEach(item => {
-             // Inject missing dates to old payload using current date as base, since they lost context
-             if (!item.Date) item.Date = targetDate;
-             if (item.Date === targetDate || !dateStr) {
-                 results.push(item);
-             }
+
+            if (!item.Date) item.Date = targetDate;
+            if (item.Date === targetDate || !dateStr) {
+              results.push(item);
+            }
           });
           return results;
         } catch (legacyErr) {
           return [];
         }
       }
-      
+
       return JSON.parse(content);
     } catch {
       return [];
@@ -1424,7 +1951,6 @@ const MonitoringService = {
 
   async saveHistory(serverId, data) {
     try {
-      // Group data by Date
       const groupedData = {};
       data.forEach(item => {
         const date = item.Date || new Date().toISOString().split('T')[0];
@@ -1432,27 +1958,22 @@ const MonitoringService = {
         groupedData[date].push(item);
       });
 
-      // Save each group to its respective daily file
       for (const [date, dailyData] of Object.entries(groupedData)) {
-         const logPath = await this.getLogPath(serverId, date);
-         
-         const optimizedData = dailyData.slice(-this.dataLimit).map(item => {
-           // Shallow clone to avoid modifying active memory array elements directly
-           const prf = { ...item };
-           
-           // Disks array is massive and unused historically
-           delete prf.Disks;
-           
-           // TopProcs is only relevant if system load implies diagnostics
-           if (prf.CPU < 80 && (prf.RAM?.Percent || 0) < 85) {
-             delete prf.TopProcs;
-           }
-           return prf;
-         });
+        const logPath = await this.getLogPath(serverId, date);
 
-         // Write pseudo-JSONL to preserve space but keep standard parseability
-         const content = "[\n" + optimizedData.map(d => "  " + JSON.stringify(d)).join(",\n") + "\n]";
-         await fs.writeFile(logPath, content, "utf-8");
+        const optimizedData = dailyData.slice(-this.dataLimit).map(item => {
+          const prf = { ...item };
+
+          delete prf.Disks;
+
+          if (prf.CPU < 80 && (prf.RAM?.Percent || 0) < 85) {
+            delete prf.TopProcs;
+          }
+          return prf;
+        });
+
+        const content = "[\n" + optimizedData.map(d => "  " + JSON.stringify(d)).join(",\n") + "\n]";
+        await fs.writeFile(logPath, content, "utf-8");
       }
     } catch (err) {
       console.error(`Save history error (${serverId}):`, err);
@@ -1463,16 +1984,15 @@ const MonitoringService = {
     const serverId = server.ID || server.id || server.host;
     if (this.sessions.has(serverId)) return;
 
-    // Register immediately as 'initializing' to prevent race conditions from quick re-entry
     this.sessions.set(serverId, { status: "initializing" });
     console.log(`[${ts()}] Starting background monitoring for: ${serverId}`);
 
     const history = await this.loadHistory(serverId);
 
-    // Check if it was stopped while we were loading history
     if (!this.sessions.has(serverId)) return;
 
     const session = {
+      type: server.type || 'windowsServer',
       config: server,
       data: history,
       interval: null,
@@ -1480,20 +2000,21 @@ const MonitoringService = {
       consecutiveErrors: 0,
       status: "connecting",
       lastError: null,
-      lastInterval: 3000,
-      preferredInterval: 3000,
+      lastInterval: 10000,
+      preferredInterval: 10000,
       sshClient: null,
+      dbPool: null,
       isConnecting: false,
-      isProcessing: false
+      isProcessing: false,
+      tenantInfo: server.tenantInfo,
+      alertState: { isOffline: false, cpuHigh: false, ramHigh: false, diskHigh: false }
     };
 
     this.sessions.set(serverId, session);
 
-    // Initial fetch
     this.runCycle(serverId);
 
-    // Set initial interval
-    session.interval = setInterval(() => this.runCycle(serverId), 3000);
+    session.interval = setInterval(() => this.runCycle(serverId), 10000);
   },
 
   async runCycle(serverId) {
@@ -1518,6 +2039,117 @@ const MonitoringService = {
           this.adjustInterval(serverId, activeInterval);
         }
 
+        if (!sess.alertState) sess.alertState = { isOffline: false, cpuHigh: false, ramHigh: false, diskHigh: false };
+
+        const serverName = sess.config.alias || sess.config.name || serverId;
+
+        if (sess.alertState.isOffline) {
+          sess.alertState.isOffline = false;
+
+          const serverName = sess.config.name || serverId;
+          const lang = store.get('config')?.ui?.language || 'tr';
+
+          const strings = {
+            tr: {
+              dbTitle: "Veritabanı Kurtarıldı",
+              dbBody: `${serverName} veritabanı bağlantısı sağlandı.`,
+              srvTitle: "Sunucu Kurtarıldı",
+              srvBody: `${serverName} sunucusu tekrar çevrimiçi oldu.`
+            },
+            en: {
+              dbTitle: "Database Recovered",
+              dbBody: `${serverName} database connection restored.`,
+              srvTitle: "Server Recovered",
+              srvBody: `${serverName} server is back online.`
+            }
+          }[lang] || strings.tr;
+
+          const recoveryTitle = sess.type === 'database' ? strings.dbTitle : strings.srvTitle;
+          const recoveryBody = sess.type === 'database' ? strings.dbBody : strings.srvBody;
+
+          new Notification({ title: recoveryTitle, body: recoveryBody }).show();
+          addAppNotification({
+            titleKey: sess.type === 'database' ? "notifications.dbRecovered.title" : "notifications.systemRecovered.title",
+            bodyKey: sess.type === 'database' ? "notifications.dbRecovered.body" : "notifications.systemRecovered.body",
+            data: { name: serverName },
+            type: "success",
+            serverId: sess.type === 'windowsServer' ? serverId : null
+          });
+        }
+
+        const cpuLoad = res.data?.CPU || 0;
+        const ramLoad = res.data?.RAM?.Percent || 0;
+
+        const cpuThreshold = 90;
+        if (cpuLoad > cpuThreshold && !sess.alertState.cpuHigh) {
+          sess.alertState.cpuHigh = true;
+          new Notification({ title: "Kritik CPU Yükü", body: `${serverName} sunucusunda CPU kullanımı %${cpuLoad} seviyesine ulaştı!` }).show();
+          addAppNotification({
+            titleKey: "notifications.cpuHigh.title",
+            bodyKey: "notifications.cpuHigh.body",
+            data: { name: serverName, value: cpuLoad },
+            type: "warning",
+            serverId
+          });
+        } else if (cpuLoad < (cpuThreshold - 2) && sess.alertState.cpuHigh) {
+          sess.alertState.cpuHigh = false;
+        }
+
+        // RAM Alert
+        if (ramLoad > 90 && !sess.alertState.ramHigh) {
+          sess.alertState.ramHigh = true;
+          new Notification({ title: "Kritik RAM Uyarısı", body: `${serverName} sunucusunda bellek kullanımı %${ramLoad} seviyesine ulaştı!` }).show();
+          addAppNotification({
+            titleKey: "notifications.ramHigh.title",
+            bodyKey: "notifications.ramHigh.body",
+            data: { name: serverName, value: ramLoad },
+            type: "warning",
+            serverId
+          });
+        } else if (ramLoad < 85 && sess.alertState.ramHigh) {
+          sess.alertState.ramHigh = false;
+        }
+
+        // Disk Alert
+        const fullDisks = (res.data?.Disks || []).filter(d => d.Percent > 90);
+        if (fullDisks.length > 0 && !sess.alertState.diskHigh) {
+          sess.alertState.diskHigh = true;
+          const driveLabel = fullDisks.map(d => d.ID).join(", ");
+          new Notification({ title: "Kritik Disk Doluluğu", body: `${serverName} sunucusunda ${driveLabel} sürücüsü %90 doluluğu geçti!` }).show();
+          addAppNotification({
+            titleKey: "notifications.diskHigh.title",
+            bodyKey: "notifications.diskHigh.body",
+            data: { name: serverName, drive: driveLabel, value: Math.round(fullDisks[0].Percent) },
+            type: "warning",
+            serverId
+          });
+        } else if (fullDisks.length === 0 && sess.alertState.diskHigh) {
+          sess.alertState.diskHigh = false;
+        }
+        // Service Stop Alert
+        if (res.data?.WatchedServices && res.data.WatchedServices.length > 0) {
+          if (!sess.alertState.services) sess.alertState.services = {};
+
+          res.data.WatchedServices.forEach(srv => {
+            const isStopped = srv.Status !== 'Running' && srv.Status !== '4';
+            const wasStopped = sess.alertState.services[srv.Name];
+
+            if (isStopped && !wasStopped) {
+              sess.alertState.services[srv.Name] = true;
+              new Notification({ title: "Kritik Servis Durdu", body: `${serverName} sunucusunda ${srv.Name} servisi durdu!` }).show();
+              addAppNotification({
+                titleKey: "notifications.serviceStopped.title",
+                bodyKey: "notifications.serviceStopped.body",
+                data: { name: serverName, service: srv.Name },
+                type: "error",
+                serverId
+              });
+            } else if (!isStopped && wasStopped) {
+              sess.alertState.services[srv.Name] = false;
+            }
+          });
+        }
+
         if (mainWindow) {
           mainWindow.webContents.send(`monitoring:update:${serverId}`, res.data);
         }
@@ -1533,13 +2165,27 @@ const MonitoringService = {
         let newStatus = "connecting";
         const baseDelay = 5000;
         const maxDelay = 120000;
-        // Exponential backoff: 5s, 7.5s, 11s, 16s... up to 120s
+
         const retryDelay = Math.round(Math.min(baseDelay * Math.pow(1.5, Math.max(0, sess.consecutiveErrors - 1)), maxDelay));
 
-        if (sess.consecutiveErrors > 15) {
+        if (sess.consecutiveErrors >= 2) {
           newStatus = "error";
-        } else if (sess.consecutiveErrors > 2) {
-          newStatus = "retrying";
+        } else {
+          newStatus = "connecting";
+        }
+
+        if (sess.consecutiveErrors >= 3) {
+          const isInitialFailure = sess.consecutiveErrors === 3;
+
+          const isRepeatingFailure = (sess.consecutiveErrors - 3) % 30 === 0;
+
+          if (isInitialFailure || isRepeatingFailure) {
+            if (!sess.alertState) sess.alertState = { isOffline: true, cpuHigh: false, ramHigh: false };
+            else sess.alertState.isOffline = true;
+
+            const serverName = sess.config.name || sess.config.alias || serverId;
+            this.queueNotification(sess.type, isInitialFailure, serverName, serverId);
+          }
         }
 
         if (sess.status !== newStatus || sess.lastInterval !== retryDelay) {
@@ -1547,6 +2193,9 @@ const MonitoringService = {
           console.warn(`[${ts()}] [Geri Çekilme - Backoff] (${serverId}) Hata: ${res.message}. ${Math.round(retryDelay / 1000)}s sonra tekrar denenecek. (Deneme: ${sess.consecutiveErrors})`);
           this.broadcastStatus(serverId, sess);
           this.adjustInterval(serverId, retryDelay);
+        } else {
+          console.log(`[${ts()}] [Geri Çekilme] (${serverId}) Hata devam ediyor. Deneme: ${sess.consecutiveErrors} (Bekleme: ${Math.round(retryDelay / 1000)}s)`);
+          this.broadcastStatus(serverId, sess);
         }
       }
     } catch (e) {
@@ -1556,29 +2205,64 @@ const MonitoringService = {
     }
   },
 
-  updateInterval(serverId, newMs) {
-    const sess = this.sessions.get(serverId);
-    if (!sess) return;
+  currentPage: "/overview",
 
-    sess.preferredInterval = newMs;
+  recalculateIntervals() {
+    const isHighFreqPage =
+      this.currentPage === "/" ||
+      this.currentPage === "/overview" ||
+      this.currentPage.includes("/win/performance") ||
+      this.currentPage.includes("/database/activity");
 
-    // Do not override actual interval if we are actively in backoff state
-    if (sess.consecutiveErrors > 0 || sess.status === "error" || sess.status === "retrying") return;
-
-    const actualInterval = this.isAppFocused ? sess.preferredInterval : 30000;
-    this.adjustInterval(serverId, actualInterval);
-  },
-
-  updateGlobalFocus(focused) {
-    this.isAppFocused = focused;
-    console.log(`[${ts()}] Monitoring Service: App focus changed to ${focused}. Adjusting intervals...`);
+    console.log(`[${ts()}] Monitoring Service: Recalculating intervals (Focus: ${this.isAppFocused}, Page: ${this.currentPage})`);
 
     for (const [serverId, sess] of this.sessions.entries()) {
       if (sess.consecutiveErrors > 0 || sess.status === "error" || sess.status === "retrying") continue;
 
-      const actualInterval = focused ? sess.preferredInterval : 30000;
+      let actualInterval = 30000;
+      if (this.isAppFocused) {
+        if (isHighFreqPage) {
+          actualInterval = sess.preferredInterval || 3000;
+        } else {
+          actualInterval = 20000;
+        }
+      }
       this.adjustInterval(serverId, actualInterval);
     }
+  },
+
+  updatePage(pagePath) {
+    if (this.currentPage === pagePath) return;
+    this.currentPage = pagePath;
+    this.recalculateIntervals();
+  },
+
+  updateInterval(serverId, newMs) {
+    const sess = this.sessions.get(serverId);
+    if (!sess) return;
+    sess.preferredInterval = newMs;
+    this.recalculateIntervals();
+  },
+
+  updateGlobalFocus(focused) {
+    if (this.isAppFocused === focused) return;
+    this.isAppFocused = focused;
+    console.log(`[${ts()}] Monitoring Service: App focus changed to ${focused}.`);
+
+
+    if (focused) {
+      for (const [serverId, sess] of this.sessions.entries()) {
+        if (sess.status === "error" || sess.consecutiveErrors > 0) {
+          console.log(`[${ts()}] Monitoring Service: App focused, forcing immediate retry for offline resource ${serverId}`);
+
+          if (sess.interval) clearInterval(sess.interval);
+          sess.lastInterval = 0;
+          this.runCycle(serverId);
+        }
+      }
+    }
+
+    this.recalculateIntervals();
   },
 
   broadcastStatus(serverId, sess) {
@@ -1601,18 +2285,71 @@ const MonitoringService = {
     sess.lastInterval = newMs;
   },
 
+  refreshAll() {
+    console.log(`[${ts()}] Monitoring: Force refreshing all ${this.sessions.size} sessions...`);
+    for (const serverId of this.sessions.keys()) {
+      this.runCycle(serverId);
+    }
+  },
+
+  updateConfig(serverId, newConfig) {
+    const sess = this.sessions.get(serverId);
+
+    if (newConfig.excludeFromMonitoring) {
+      if (sess) {
+        console.log(`[${ts()}] Monitoring (${serverId}) is now excluded. Stopping...`);
+        this.stop(serverId);
+      }
+      return;
+    }
+
+    if (!sess) {
+      console.log(`[${ts()}] Monitoring (${serverId}) is no longer excluded. Starting...`);
+      this.start({ ...newConfig, type: newConfig.type || (serverId.startsWith('db-') ? 'database' : 'windowsServer') });
+      return;
+    }
+
+    console.log(`[${ts()}] Monitoring (${serverId}) config updated. Refreshing connection...`);
+    sess.config = { ...newConfig, type: newConfig.type || sess.type };
+
+    if (sess.sshClient) {
+      try { sess.sshClient.end(); } catch (e) { }
+      sess.sshClient = null;
+    }
+
+    if (sess.dbPool) {
+      try { sess.dbPool.close(); } catch (e) { }
+      sess.dbPool = null;
+    }
+
+    this.runCycle(serverId);
+  },
+
+  stop(serverId) {
+    const sess = this.sessions.get(serverId);
+    if (sess) {
+      if (sess.interval) clearInterval(sess.interval);
+      if (sess.sshClient) {
+        try { sess.sshClient.end(); } catch (e) { }
+      }
+      if (sess.dbPool) {
+        try { sess.dbPool.close(); } catch (e) { }
+      }
+      this.saveHistory(serverId, sess.data);
+      this.sessions.delete(serverId);
+    }
+  },
+
   async getConnection(serverId, config) {
     const sess = this.sessions.get(serverId);
     if (!sess) return null;
 
-    // Use the existing connection if it is active. 
-    // The "close" or "error" listeners will actively nullify this if it drops.
     if (sess.sshClient) {
       return sess.sshClient;
     }
 
     if (sess.isConnecting) {
-      // Wait for current connection attempt
+
       return new Promise((resolve) => {
         const check = setInterval(() => {
           if (!sess.isConnecting) {
@@ -1674,7 +2411,57 @@ const MonitoringService = {
   },
 
   async performFetch(config) {
-    const serverId = config.id || config.host;
+    const serverId = config.id || config.host || config.server;
+    const sess = this.sessions.get(serverId);
+    if (!sess) return { success: false, message: "Session not found" };
+
+    if (config.type === 'database') {
+      try {
+
+        if (!sess.dbPool || !sess.dbPool.connected) {
+          const dbConfig = {
+            server: config.server,
+            database: config.databaseName || config.database || "",
+            user: config.user,
+            password: security.decrypt(config.password),
+            options: {
+              encrypt: false,
+              trustServerCertificate: true,
+              enableArithAbort: true,
+            },
+            pool: { max: 1, min: 0, idleTimeoutMillis: 30000 },
+          };
+          sess.dbPool = await new sql.ConnectionPool(dbConfig).connect();
+        }
+
+        const pool = sess.dbPool;
+        let sessionCount = 0;
+        try {
+          const result = await pool.request().query(`
+            SELECT COUNT(*) as Count 
+            FROM sys.dm_exec_sessions 
+            WHERE is_user_process = 1 AND database_id = DB_ID()
+          `);
+          sessionCount = result.recordset[0].Count;
+        } catch (dbErr) {
+
+          sess.dbPool = null;
+          throw dbErr;
+        }
+
+        return {
+          success: true,
+          data: {
+            activeSessions: sessionCount,
+            Timestamp: new Date().toLocaleTimeString('tr-TR', { hour12: false })
+          }
+        };
+      } catch (err) {
+        return { success: false, message: err.message };
+      }
+    }
+
+
     const conn = await this.getConnection(serverId, config);
 
     if (!conn) {
@@ -1691,13 +2478,19 @@ const MonitoringService = {
           try {
             const sess = this.sessions.get(serverId);
             if (sess && sess.sshClient === conn) sess.sshClient = null;
-            conn.destroy(); // Brutally kill the hung connection to prevent ghost channels
-          } catch(e) {}
+            conn.destroy();
+          } catch (e) { }
           resolve({ success: false, message: "Timeout" });
         }
       }, 30000);
 
-      const command = `powershell.exe -NoProfile -Command "$cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \\"Name='_Total'\\" -Property PercentProcessorTime).PercentProcessorTime; $mem = Get-CimInstance Win32_OperatingSystem -Property TotalVisibleMemorySize, FreePhysicalMemory; $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3 OR DriveType=2' -Property DeviceID, Size, FreeSpace, VolumeName; $diskIO = (Get-CimInstance Win32_PerfFormattedData_PerfDisk_LogicalDisk -Filter \\"Name='_Total'\\" -Property DiskBytesPersec).DiskBytesPersec; $netIO = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface -Property BytesTotalPersec | Measure-Object -Property BytesTotalPersec -Sum).Sum; if ($null -eq $netIO) { $netIO = 0 }; $procCount = (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors; if ($null -eq $procCount -or $procCount -lt 1) { $procCount = 1 }; $procs = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter \\"Name != '_Total' AND Name != 'Idle'\\" -Property Name, PercentProcessorTime | Sort-Object PercentProcessorTime -Descending | Select-Object -First 5 | ForEach-Object { @{ Name = $_.Name; CPU = [Math]::Round(($_.PercentProcessorTime / $procCount), 1) } }; $info = @{ CPU = [Math]::Round([double]$cpu, 1); RAM = @{ Total = [Math]::Round([double]$mem.TotalVisibleMemorySize / 1MB, 2); Used = [Math]::Round(([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / 1MB, 2); Percent = [Math]::Round(((([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / ([double]$mem.TotalVisibleMemorySize + 1)) * 100), 1) }; Disks = @($disks | ForEach-Object { @{ ID = $_.DeviceID; Name = $_.VolumeName; Total = [Math]::Round([double]$_.Size / 1GB, 2); Free = [Math]::Round([double]$_.FreeSpace / 1GB, 2); Percent = [Math]::Round(((([double]$_.Size - [double]$_.FreeSpace) / ([double]$_.Size + 0.1)) * 100), 1) }; }); IO = @{ DiskRW = [Math]::Round([double]$diskIO / 1MB, 2); Network = [Math]::Round([double]$netIO / 1KB, 2) }; TopProcs = $procs; Timestamp = Get-Date -Format 'HH:mm:ss' }; $info | ConvertTo-Json -Depth 5"`;
+      let servicesScript = `$services = @(); `;
+      if (config.watchedServices && config.watchedServices.length > 0) {
+        const sList = config.watchedServices.map(s => `'${s}'`).join(',');
+        servicesScript = `$services = Get-Service -Name ${sList} -ErrorAction SilentlyContinue | Select-Object Name, Status | ForEach-Object { @{ Name = $_.Name; Status = $_.Status.ToString() } }; `;
+      }
+
+      const command = `powershell.exe -NoProfile -Command "${servicesScript}$cpu = (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \\"Name='_Total'\\" -Property PercentProcessorTime).PercentProcessorTime; $mem = Get-CimInstance Win32_OperatingSystem -Property TotalVisibleMemorySize, FreePhysicalMemory; $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3 OR DriveType=2' -Property DeviceID, Size, FreeSpace, VolumeName; $diskIO = (Get-CimInstance Win32_PerfFormattedData_PerfDisk_LogicalDisk -Filter \\"Name='_Total'\\" -Property DiskBytesPersec).DiskBytesPersec; $netIO = (Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface -Property BytesTotalPersec | Measure-Object -Property BytesTotalPersec -Sum).Sum; if ($null -eq $netIO) { $netIO = 0 }; $procCount = (Get-CimInstance Win32_Processor).NumberOfLogicalProcessors; if ($null -eq $procCount -or $procCount -lt 1) { $procCount = 1 }; $procs = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter \\"Name != '_Total' AND Name != 'Idle'\\" -Property Name, PercentProcessorTime | Sort-Object PercentProcessorTime -Descending | Select-Object -First 5 | ForEach-Object { @{ Name = $_.Name; CPU = [Math]::Round(($_.PercentProcessorTime / $procCount), 1) } }; $info = @{ CPU = [Math]::Round([double]$cpu, 1); RAM = @{ Total = [Math]::Round([double]$mem.TotalVisibleMemorySize / 1MB, 2); Used = [Math]::Round(([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / 1MB, 2); Percent = [Math]::Round(((([double]$mem.TotalVisibleMemorySize - [double]$mem.FreePhysicalMemory) / ([double]$mem.TotalVisibleMemorySize + 1)) * 100), 1) }; Disks = @($disks | ForEach-Object { @{ ID = $_.DeviceID; Name = $_.VolumeName; Total = [Math]::Round([double]$_.Size / 1GB, 2); Free = [Math]::Round([double]$_.FreeSpace / 1GB, 2); Percent = [Math]::Round(((([double]$_.Size - [double]$_.FreeSpace) / ([double]$_.Size + 0.1)) * 100), 1) }; }); IO = @{ DiskRW = [Math]::Round([double]$diskIO / 1MB, 2); Network = [Math]::Round([double]$netIO / 1KB, 2) }; TopProcs = $procs; WatchedServices = @($services); Timestamp = Get-Date -Format 'HH:mm:ss' }; $info | ConvertTo-Json -Depth 5"`;
 
       conn.exec(command, (err, stream) => {
         if (err) {
@@ -1717,7 +2510,7 @@ const MonitoringService = {
           if (!isResolved) {
             isResolved = true;
             clearTimeout(timeout);
-            
+
             if (stdErrData) {
               console.error(`[${ts()}] [PowerShell Hatası] (${serverId}):`, stdErrData.trim());
             }
@@ -1727,7 +2520,7 @@ const MonitoringService = {
 
             try {
               const res = JSON.parse(data.trim());
-              res.Date = new Date().toISOString().split('T')[0]; // Inject Date for daily grouping
+              res.Date = new Date().toISOString().split('T')[0];
               resolve({ success: true, data: res });
             } catch (e) {
               console.error(`[${ts()}] [Ayrıştırma / JSON Hatası] (${serverId}): Sunucudan gelen veri işlenemedi. Gelen veri:`, data.substring(0, 200) + "...");
@@ -1745,8 +2538,28 @@ ipcMain.handle("monitoring:start", (event, server) => {
   return { success: true };
 });
 
+ipcMain.handle("monitoring:updateConfig", (event, { serverId, config }) => {
+  MonitoringService.updateConfig(serverId, config);
+  return { success: true };
+});
+
+ipcMain.handle("monitoring:getAllStatuses", async () => {
+  const statuses = {};
+  for (const [serverId, sess] of MonitoringService.sessions.entries()) {
+    if (sess.status === "initializing") continue;
+
+    statuses[serverId] = {
+      status: sess.status,
+      lastData: sess.data.length > 0 ? sess.data[sess.data.length - 1] : null,
+      lastError: sess.lastError,
+      consecutiveErrors: sess.consecutiveErrors
+    };
+  }
+  return { success: true, data: statuses };
+});
+
 ipcMain.handle("monitoring:getHistory", async (event, args) => {
-  // Support both old `serverId` string and new `{serverId, dateStr}` object calls
+
   const serverId = typeof args === 'string' ? args : args.serverId;
   const dateStr = typeof args === 'string' ? null : args.dateStr;
 
@@ -1754,12 +2567,10 @@ ipcMain.handle("monitoring:getHistory", async (event, args) => {
   const todayDateStr = new Date().toISOString().split('T')[0];
   const isTargetingToday = !dateStr || dateStr === todayDateStr;
 
-  // Only return session data if it's already fully loaded & we're asking for today
   if (session && session.data && isTargetingToday) {
     return { success: true, data: session.data };
   }
-  
-  // Fetch from disk for the specified date
+
   const history = await MonitoringService.loadHistory(serverId, dateStr);
   return { success: true, data: history };
 });
@@ -1770,15 +2581,7 @@ ipcMain.handle("monitoring:getAvailableDates", async (event, serverId) => {
 });
 
 ipcMain.handle("monitoring:stop", (event, serverId) => {
-  const sess = MonitoringService.sessions.get(serverId);
-  if (sess) {
-    if (sess.interval) clearInterval(sess.interval);
-    if (sess.sshClient) {
-      try { sess.sshClient.end(); } catch (e) { }
-    }
-    MonitoringService.saveHistory(serverId, sess.data);
-    MonitoringService.sessions.delete(serverId);
-  }
+  MonitoringService.stop(serverId);
   return { success: true };
 });
 
@@ -1786,14 +2589,12 @@ ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'las
   const serverId = server.id || server.host;
 
   let history = [];
-  
-  // Backwards compat with single date requests or range reports
+
   if (dateRange && dateRange.start && dateRange.end) {
-    // Generate an array of dates between start and end inclusive
     const start = new Date(dateRange.start);
     const end = new Date(dateRange.end);
     let iter = new Date(start);
-    
+
     while (iter <= end) {
       const iterStr = iter.toISOString().split('T')[0];
       const items = await MonitoringService.loadHistory(serverId, iterStr);
@@ -1801,20 +2602,17 @@ ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'las
       iter.setDate(iter.getDate() + 1);
     }
   } else {
-    // Legacy single date handler
     const todayDateStr = new Date().toISOString().split('T')[0];
     const targetDate = dateStr || todayDateStr;
     const isTargetingToday = targetDate === todayDateStr;
 
     if (isTargetingToday) {
-      // Try memory first for today's active session
       const sess = MonitoringService.sessions.get(serverId);
       history = sess ? [...sess.data] : [];
       if (history.length === 0) {
         history = await MonitoringService.loadHistory(serverId, todayDateStr);
       }
     } else {
-      // Exact history day pull
       history = await MonitoringService.loadHistory(serverId, dateStr);
     }
   }
@@ -1882,7 +2680,6 @@ ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'las
     return { success: false, message: t.noData };
   }
 
-  // Calculate stats
   const stats = {
     cpu: { avg: 0, max: 0, min: 100 },
     ram: { avg: 0, max: 0, min: 100 },
@@ -1933,7 +2730,6 @@ ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'las
 
   if (stats.ram.avg > 85) diagText += ` ${t.diagnostics.ramCritical}`;
 
-  // HTML Template
   const reportHtml = `
     <!DOCTYPE html>
     <html>
@@ -2039,7 +2835,6 @@ ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'las
     fsSync.writeFileSync(filePath, pdfData);
     workerWindow.destroy();
 
-    // Open the PDF automatically
     shell.openPath(filePath);
 
     return { success: true, path: filePath };
@@ -2051,5 +2846,10 @@ ipcMain.handle("monitoring:generateReport", async (event, { server, range = 'las
 
 ipcMain.handle("monitoring:updateInterval", (event, serverId, intervalMs) => {
   MonitoringService.updateInterval(serverId, intervalMs);
+  return { success: true };
+});
+
+ipcMain.handle("monitoring:refresh", () => {
+  MonitoringService.refreshAll();
   return { success: true };
 });

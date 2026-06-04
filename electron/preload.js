@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   winTestConnection: (config) => ipcRenderer.invoke("win:testConnection", config),
   winGetPerformanceStats: (config) => ipcRenderer.invoke("win:getPerformanceStats", config),
   winGetServices: (config) => ipcRenderer.invoke("win:getServices", config),
+  winStartService: (args) => ipcRenderer.invoke("win:startService", args),
+  winStopService: (args) => ipcRenderer.invoke("win:stopService", args),
+  winToggleServiceWatch: (args) => ipcRenderer.invoke("win:toggleServiceWatch", args),
 
   dbGetFragmentedIndexes: () => ipcRenderer.invoke("db:getFragmentedIndexes"),
   dbFixIndex: (args) => ipcRenderer.invoke("db:fixIndex", args),
@@ -65,14 +68,32 @@ contextBridge.exposeInMainWorld("electronAPI", {
   windowMinimize: () => ipcRenderer.send("window:minimize"),
   windowMaximize: () => ipcRenderer.send("window:maximize"),
   windowClose: () => ipcRenderer.send("window:close"),
+  appPageChanged: (pagePath) => ipcRenderer.send("app:pageChanged", pagePath),
+  appSetTrayLanguage: (langStrings) => ipcRenderer.send("app:setTrayLanguage", langStrings),
+
+  // Notifications
+  notificationsGet: () => ipcRenderer.invoke("notifications:get"),
+  notificationsMarkAsRead: (id) => ipcRenderer.invoke("notifications:markAsRead", id),
+  notificationsToggleRead: (id) => ipcRenderer.invoke("notifications:toggleRead", id),
+  notificationsMarkAllAsRead: () => ipcRenderer.invoke("notifications:markAllAsRead"),
+  notificationsClearAll: () => ipcRenderer.invoke("notifications:clearAll"),
+  onAppNotification: (callback) => {
+    const channel = "app:notification";
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
 
   // Monitoring Service
   monitoringStart: (server) => ipcRenderer.invoke("monitoring:start", server),
-  monitoringGetHistory: (serverId, dateStr) => ipcRenderer.invoke("monitoring:getHistory", { serverId, dateStr }),
+  monitoringStop: (id) => ipcRenderer.invoke("monitoring:stop", id),
+  monitoringUpdateInterval: (id, ms) => ipcRenderer.invoke("monitoring:updateInterval", { serverId: id, interval: ms }),
+  monitoringUpdateConfig: (id, config) => ipcRenderer.invoke("monitoring:updateConfig", { serverId: id, config }),
+  monitoringGetHistory: (args) => ipcRenderer.invoke("monitoring:getHistory", args),
   monitoringGetAvailableDates: (serverId) => ipcRenderer.invoke("monitoring:getAvailableDates", serverId),
-  monitoringStop: (serverId) => ipcRenderer.invoke("monitoring:stop", serverId),
-  monitoringUpdateInterval: (serverId, intervalMs) => ipcRenderer.invoke("monitoring:updateInterval", serverId, intervalMs),
   monitoringGenerateReport: (args) => ipcRenderer.invoke("monitoring:generateReport", args),
+  monitoringRefresh: () => ipcRenderer.invoke("monitoring:refresh"),
+  monitoringGetAllStatuses: () => ipcRenderer.invoke("monitoring:getAllStatuses"),
   onMonitoringUpdate: (serverId, callback) => {
     const channel = `monitoring:update:${serverId}`;
     const listener = (event, data) => callback(data);
@@ -86,5 +107,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener(channel, listener);
   },
 
+  onTenantsUpdated: (callback) => {
+    const channel = "tenants-updated";
+    const listener = () => callback();
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+
+  // Terminal Streams
+  winStartTerminalSession: (serverId, config) => ipcRenderer.invoke("win:startTerminalSession", serverId, config),
+  winTerminalInput: (serverId, input) => ipcRenderer.invoke("win:terminalInput", serverId, input),
+  winResizeTerminal: (serverId, cols, rows) => ipcRenderer.invoke("win:resizeTerminal", serverId, cols, rows),
+  winStopTerminalSession: (serverId) => ipcRenderer.invoke("win:stopTerminalSession", serverId),
+  onTerminalData: (serverId, callback) => {
+    const channel = `terminal:data:${serverId}`;
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+
+  sendNetworkStatus: (online) => ipcRenderer.send("app:networkStatus", { online }),
   platform: process.platform,
 });

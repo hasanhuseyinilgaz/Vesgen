@@ -40,10 +40,12 @@ interface ResourceCardProps {
   host?: string;
   status: "online" | "offline" | "connecting";
   stats?: { cpu?: number; ram?: number; disk?: number };
+  sessionCount?: number;
   onClick?: () => void;
 }
 
-export function ResourceCard({ type, name, host, status, stats, onClick }: ResourceCardProps) {
+export function ResourceCard({ type, name, host, status, stats, sessionCount, onClick }: ResourceCardProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="group glass-card border border-border/40 p-5 rounded-2xl flex flex-col gap-4 hover:border-primary/40 transition-all cursor-pointer relative overflow-hidden"
@@ -76,18 +78,23 @@ export function ResourceCard({ type, name, host, status, stats, onClick }: Resou
         </div>
       </div>
 
-      {type === "server" && stats && (
+      {type === "server" && (
         <div className="grid grid-cols-1 gap-3 mt-1 relative z-10">
-          <MiniGauge value={stats.cpu || 0} label="CPU" color={(stats.cpu || 0) > 80 ? "destructive" : "info"} />
-          <MiniGauge value={stats.ram || 0} label="RAM" color={(stats.ram || 0) > 80 ? "destructive" : "primary"} />
+          <MiniGauge value={stats?.cpu || 0} label="CPU" color={(stats?.cpu || 0) > 80 ? "destructive" : "info"} />
+          <MiniGauge value={stats?.ram || 0} label="RAM" color={(stats?.ram || 0) > 80 ? "destructive" : "primary"} />
         </div>
       )}
 
       {type === "database" && (
         <div className="flex items-center gap-4 mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
-          <div className="flex items-center gap-1.5">
-            <Activity className="w-3 h-3 text-primary/70" />
-            <span className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-widest">Active Sessions: --</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Activity className={cn(
+              "w-3.5 h-3.5 transition-colors",
+              (sessionCount || 0) > 0 ? "text-success animate-pulse" : "text-primary/70"
+            )} />
+            <span className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-widest truncate">
+              {t("activity.activeSessions")}: {sessionCount || 0}
+            </span>
           </div>
         </div>
       )}
@@ -97,72 +104,87 @@ export function ResourceCard({ type, name, host, status, stats, onClick }: Resou
 
 export default function ResourceFleet({
   databases,
-  servers
+  servers,
+  showDatabases = true,
+  showServers = true,
+  fleetStatus = {},
+  fleetMetrics = {},
+  fleetSessions = {}
 }: {
   databases: DatabaseResource[],
-  servers: WindowsServerResource[]
+  servers: WindowsServerResource[],
+  showDatabases?: boolean,
+  showServers?: boolean,
+  fleetStatus?: Record<string, "online" | "offline" | "connecting">,
+  fleetMetrics?: Record<string, { cpu?: number; ram?: number }>,
+  fleetSessions?: Record<string, number>
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 gap-12">
       {/* Databases Section */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary" />
-            <h3 className="text-xl font-black tracking-tight uppercase tracking-widest text-muted-foreground/80">{t("dashboard.databases")}</h3>
-          </div>
-          <span className="text-[10px] font-black uppercase tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full">{databases.length}</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {databases.map((db, i) => (
-            <ResourceCard
-              key={db.id || i}
-              type="database"
-              name={db.name}
-              host={db.server}
-              status="online"
-              onClick={() => navigate("/database/tables")}
-            />
-          ))}
-          {databases.length === 0 && (
-            <div className="col-span-full py-12 text-center glass-card rounded-2xl border-dashed border-2">
-              <span className="text-muted-foreground text-sm font-black uppercase tracking-widest opacity-50">No Databases Linked</span>
+      {showDatabases && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 px-2">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" />
+              <h3 className="text-xl font-black tracking-tight uppercase tracking-widest text-muted-foreground/80">{t("dashboard.databases")}</h3>
             </div>
-          )}
+            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-primary/10 text-primary text-[9px] font-black shrink-0">{databases.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {databases.map((db, i) => (
+              <ResourceCard
+                key={db.id || i}
+                type="database"
+                name={db.name}
+                host={db.server}
+                status={fleetStatus?.[db.id] || "offline"}
+                sessionCount={fleetSessions?.[db.id]}
+                onClick={() => navigate("/database/tables")}
+              />
+            ))}
+            {databases.length === 0 && (
+              <div className="col-span-full py-12 text-center glass-card rounded-2xl border-dashed border-2">
+                <span className="text-muted-foreground text-sm font-black uppercase tracking-widest opacity-50">No Databases Linked</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Servers Section */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-2">
-            <Server className="h-5 w-5 text-info" />
-            <h3 className="text-xl font-black tracking-tight uppercase tracking-widest text-muted-foreground/80">{t("dashboard.servers")}</h3>
-          </div>
-          <span className="text-[10px] font-black uppercase tracking-widest bg-info/10 text-info px-2 py-0.5 rounded-full">{servers.length}</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {servers.map((server, i) => (
-            <ResourceCard
-              key={server.id || i}
-              type="server"
-              name={server.alias || server.name || "Server"}
-              host={server.host}
-              status="online"
-              stats={{ cpu: 45, ram: 62 }} // Mock for now
-              onClick={() => navigate("/win/performance")}
-            />
-          ))}
-          {servers.length === 0 && (
-            <div className="col-span-full py-12 text-center glass-card rounded-2xl border-dashed border-2">
-              <span className="text-muted-foreground text-sm font-black uppercase tracking-widest opacity-50">No Servers Linked</span>
+      {showServers && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 px-2">
+            <div className="flex items-center gap-2">
+              <Server className="h-5 w-5 text-info" />
+              <h3 className="text-xl font-black tracking-tight uppercase tracking-widest text-muted-foreground/80">{t("dashboard.servers")}</h3>
             </div>
-          )}
+            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-info/10 text-info text-[9px] font-black shrink-0">{servers.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {servers.map((server, i) => (
+              <ResourceCard
+                key={server.id || i}
+                type="server"
+                name={server.alias || server.name || "Server"}
+                host={server.host}
+                status={fleetStatus?.[server.id] || "offline"}
+                stats={fleetMetrics?.[server.id]}
+                onClick={() => navigate("/win/performance")}
+              />
+            ))}
+            {servers.length === 0 && (
+              <div className="col-span-full py-12 text-center glass-card rounded-2xl border-dashed border-2">
+                <span className="text-muted-foreground text-sm font-black uppercase tracking-widest opacity-50">No Servers Linked</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
     LayoutDashboard,
     ChevronDown,
     ChevronRight,
+    ChevronLeft,
     PlusCircle,
     Monitor,
     TerminalSquare,
@@ -31,7 +32,10 @@ import {
 import { Tenant } from "@/types";
 import { cn } from "@/lib/utils";
 import ActionTooltip from "@/components/ui/action-tooltip";
+import { useModals } from "@/contexts/ModalContext";
 import { APP_INFO } from "@/lib/constants";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { Bell } from "lucide-react";
 
 interface AppSidebarProps {
     sidebarOpen: boolean;
@@ -43,10 +47,6 @@ interface AppSidebarProps {
     activeWinServerId: string | null;
     setActiveWinServerId: (id: string | null) => void;
     onDisconnect: () => void;
-    openAddDbModal: () => void;
-    openDbSettingsModal: () => void;
-    openAddWinServerModal: () => void;
-    handleEditWinServer: () => void;
 }
 
 export default function AppSidebar({
@@ -59,14 +59,12 @@ export default function AppSidebar({
     activeWinServerId,
     setActiveWinServerId,
     onDisconnect,
-    openAddDbModal,
-    openDbSettingsModal,
-    openAddWinServerModal,
-    handleEditWinServer,
 }: AppSidebarProps) {
+    const modals = useModals();
     const { t } = useTranslation();
     const navigate = useNavigate();
     const location = useLocation();
+    const { unreadCount } = useNotifications();
 
     const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
         "db-management": true,
@@ -97,10 +95,12 @@ export default function AppSidebar({
         path,
         icon: Icon,
         label,
+        badge,
     }: {
         path: string;
         icon: any;
         label: string;
+        badge?: number;
     }) => {
         const isActive = location.pathname === path;
         return (
@@ -108,35 +108,53 @@ export default function AppSidebar({
                 <Button
                     variant="ghost"
                     className={cn(
-                        "w-full flex items-center justify-start p-0 h-10 font-normal transition-colors rounded-lg group overflow-hidden",
+                        "flex items-center justify-start p-0 h-10 font-medium transition-colors duration-200 ease-in-out rounded-lg group active:scale-95 outline-none antialiased relative",
+                        sidebarOpen ? "w-full" : "w-10 mx-auto",
                         isActive
-                            ? "bg-primary/10 text-primary font-medium"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                            ? "bg-primary/10 text-primary hover:bg-primary hover:text-white"
+                            : (badge !== undefined && badge > 0)
+                                ? "bg-destructive/10 text-destructive hover:bg-destructive/15"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                     )}
-                    onClick={() => navigate(path)}
+                    onClick={() => {
+                        if (isActive) return;
+                        navigate(path);
+                    }}
                 >
                     <div className={cn(
-                        "h-full shrink-0 flex items-center justify-center transition-colors",
-                        sidebarOpen ? "w-[56px]" : "w-[72px]"
+                        "h-full shrink-0 flex items-center justify-center transition-all duration-75",
+                        sidebarOpen ? "w-[56px]" : "w-full"
                     )}>
                         <Icon
                             className={cn(
-                                "transition-colors duration-300",
+                                "transition-colors duration-200 ease-in-out",
                                 sidebarOpen ? "h-4 w-4" : "h-5 w-5",
                                 isActive
-                                    ? "text-primary"
-                                    : "text-muted-foreground group-hover:text-foreground",
+                                    ? "text-primary group-hover:text-white"
+                                    : (badge !== undefined && badge > 0)
+                                        ? "text-destructive animate-bell-ring"
+                                        : "text-muted-foreground group-hover:text-foreground",
                             )}
                         />
                     </div>
                     <div
                         className={cn(
-                            "flex-1 flex items-center overflow-hidden transition-all duration-300 whitespace-nowrap",
+                            "flex-1 flex items-center justify-between overflow-hidden transition-all duration-75 whitespace-nowrap",
                             sidebarOpen ? "opacity-100 pr-3" : "opacity-0 w-0",
                         )}
                     >
                         <span className="truncate text-sm">{label}</span>
+                        {badge !== undefined && badge > 0 && sidebarOpen && (
+                            <span className="flex items-center justify-center h-4.5 min-w-[18px] px-1 bg-destructive text-white text-[10px] font-black rounded-full shadow-sm">
+                                {badge > 99 ? '99+' : badge}
+                            </span>
+                        )}
                     </div>
+                    {!sidebarOpen && badge !== undefined && badge > 0 && (
+                        <div className="absolute -top-1 -right-1 flex items-center justify-center h-4 min-w-[16px] px-1 bg-destructive text-white text-[9px] font-black rounded-full border-2 border-card shadow-sm z-10 animate-in zoom-in duration-300">
+                            {badge > 9 ? '9+' : badge}
+                        </div>
+                    )}
                 </Button>
             </SidebarTooltip>
         );
@@ -150,46 +168,25 @@ export default function AppSidebar({
     return (
         <aside
             className={cn(
-                "bg-card border-r transition-all duration-300 ease-in-out flex flex-col shrink-0 z-20 overflow-hidden",
+                "bg-card border-r transition-all duration-300 ease-in-out flex flex-col shrink-0 z-20 relative",
                 sidebarOpen ? "w-64" : "w-[72px]",
             )}
         >
+            {/* Floating Toggle Button */}
+            <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className={cn(
+                    "absolute -right-3 w-6 h-6 rounded-full border bg-card shadow-sm flex items-center justify-center z-50 hover:bg-primary hover:text-white transition-all duration-300 group/toggle",
+                    sidebarOpen ? "top-[77px]" : "top-[61px]"
+                )}
+            >
+                {sidebarOpen ? (
+                    <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground group-hover/toggle:text-white transition-colors" />
+                ) : (
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover/toggle:text-white transition-colors" />
+                )}
+            </button>
             <div className="p-4 border-b flex flex-col gap-4">
-                <div className="relative flex items-center justify-between h-8">
-                    <div
-                        className={cn(
-                            "absolute left-0 flex items-center gap-2 transition-all duration-300 whitespace-nowrap",
-                            sidebarOpen
-                                ? "opacity-100 translate-x-0"
-                                : "opacity-0 -translate-x-4 pointer-events-none",
-                        )}
-                    >
-                        <div className="bg-primary/10 p-1.5 rounded-lg shrink-0">
-                            <Database className="h-4 w-4 text-primary" />
-                        </div>
-                        <span className="font-bold text-lg text-foreground tracking-tight">
-                            {APP_INFO.NAME}
-                        </span>
-                    </div>
-
-                    <ActionTooltip
-                        label={sidebarOpen ? "Menüyü Daralt" : "Menüyü Genişlet"}
-                        side="right"
-                    >
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setSidebarOpen(!sidebarOpen)}
-                            className={cn(
-                                "absolute transition-all duration-300 shrink-0 h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary",
-                                sidebarOpen ? "right-0" : "left-1/2 -translate-x-1/2",
-                            )}
-                        >
-                            <Menu className="h-5 w-5" />
-                        </Button>
-                    </ActionTooltip>
-                </div>
-
                 {tenant && (
                     <div
                         className={cn(
@@ -249,39 +246,72 @@ export default function AppSidebar({
             </div>
 
             <nav className={cn(
-                "flex-1 py-4 space-y-4 overflow-y-auto overflow-x-hidden scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden transition-all duration-300",
-                sidebarOpen ? "px-2" : "px-0"
+                "flex-1 py-4 space-y-6 overflow-y-auto overflow-x-hidden scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden transition-all duration-300",
+                sidebarOpen ? "px-3" : "px-2"
             )}>
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-1">
+                    <div className={cn(
+                        "relative flex items-center w-full h-8 mb-1 px-3 transition-opacity duration-300",
+                        !sidebarOpen && "justify-center"
+                    )}>
+                        <span className={cn(
+                            "text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground/50",
+                            !sidebarOpen && "hidden"
+                        )}>
+                            {t("common.global")}
+                        </span>
+                        {!sidebarOpen && (
+                            <div className="h-px w-6 bg-muted-foreground/20" />
+                        )}
+                    </div>
                     <MenuItem
                         path="/overview"
                         icon={LayoutDashboard}
                         label={t("dashboard.overview")}
                     />
+                    <MenuItem
+                        path="/notifications"
+                        icon={Bell}
+                        label={t("notifications.title")}
+                        badge={unreadCount}
+                    />
+                    <MenuItem
+                        path="/settings"
+                        icon={Settings}
+                        label={t("settings.title")}
+                    />
                 </div>
 
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-1">
                     <SidebarTooltip label={t("dashboard.dbManagement")}>
                         <div
-                            className="relative flex items-center w-full h-9 cursor-pointer hover:bg-muted/50 rounded-lg mb-1 overflow-hidden"
+                            className={cn(
+                                "relative flex items-center w-full h-10 cursor-pointer rounded-lg mb-1 overflow-hidden transition-all duration-300",
+                                sidebarOpen && "hover:bg-muted/50"
+                            )}
                             onClick={() => handleAccordionClick("db-management")}
                         >
                             <div
                                 className={cn(
-                                    "absolute left-0 w-[56px] h-full flex items-center justify-center transition-all duration-300",
+                                    "absolute inset-0 flex items-center justify-center transition-all duration-300",
                                     sidebarOpen
                                         ? "-translate-x-full opacity-0"
                                         : "translate-x-0 opacity-100",
                                 )}
                             >
-                                <Database
-                                    className={cn(
-                                        "h-5 w-5 transition-colors",
-                                        openMenus["db-management"]
-                                            ? "text-primary"
-                                            : "text-muted-foreground/60",
-                                    )}
-                                />
+                                <div className={cn(
+                                    "transition-all duration-150 active:scale-95",
+                                    !sidebarOpen && "w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20"
+                                )}>
+                                    <Database
+                                        className={cn(
+                                            "h-5 w-5 transition-colors duration-150",
+                                            openMenus["db-management"]
+                                                ? "text-primary"
+                                                : "text-muted-foreground/60 hover:text-primary",
+                                        )}
+                                    />
+                                </div>
                             </div>
                             <div
                                 className={cn(
@@ -340,10 +370,9 @@ export default function AppSidebar({
                                                     onValueChange={(val) => {
                                                         if (val) {
                                                             setActiveDatabaseId(val);
-                                                            navigate("/dashboard");
+                                                            navigate("/overview");
                                                         }
                                                     }}
-                                                    disabled={isConnectingDb}
                                                 >
                                                     <SelectTrigger className="w-full h-8 text-xs bg-background border-input focus:ring-1 focus:ring-primary shadow-sm font-medium">
                                                         <SelectValue
@@ -371,7 +400,7 @@ export default function AppSidebar({
                                                             variant="outline"
                                                             size="icon"
                                                             className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground shadow-sm bg-background transition-all active:scale-90"
-                                                            onClick={openDbSettingsModal}
+                                                            onClick={modals.openDbSettings}
                                                         >
                                                             <MoreVertical className="h-4 w-4" />
                                                         </Button>
@@ -460,17 +489,20 @@ export default function AppSidebar({
 
                                 <SidebarTooltip label={t("dashboard.addDatabase")}>
                                     <Button
-                                        onClick={openAddDbModal}
+                                        onClick={modals.openAddDatabase}
                                         variant="ghost"
-                                        className="w-full flex items-center justify-start p-0 h-10 font-normal transition-colors duration-300 rounded-lg group text-primary hover:bg-primary/10 mt-1"
+                                        className={cn(
+                                            "flex items-center justify-start p-0 h-10 font-medium transition-all duration-150 rounded-lg group text-primary hover:bg-primary/10 mt-1 active:scale-95 focus:ring-0 focus-visible:ring-0 outline-none antialiased",
+                                            sidebarOpen ? "w-full" : "w-10 mx-auto"
+                                        )}
                                     >
                                         <div className={cn(
-                                            "h-full shrink-0 flex items-center justify-center transition-all duration-300",
-                                            sidebarOpen ? "w-[56px]" : "w-[72px]"
+                                            "h-full shrink-0 flex items-center justify-center transition-all duration-75",
+                                            sidebarOpen ? "w-[56px]" : "w-full"
                                         )}>
                                             <PlusCircle
                                                 className={cn(
-                                                    "transition-colors duration-300",
+                                                    "transition-colors duration-150",
                                                     sidebarOpen ? "h-4 w-4" : "h-5 w-5",
                                                 )}
                                             />
@@ -494,28 +526,36 @@ export default function AppSidebar({
                     </div>
                 </div>
 
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-1">
                     <SidebarTooltip label={t("dashboard.winServers")}>
                         <div
-                            className="relative flex items-center w-full h-9 cursor-pointer hover:bg-muted/50 rounded-lg mb-1 overflow-hidden"
+                            className={cn(
+                                "relative flex items-center w-full h-10 cursor-pointer rounded-lg mb-1 overflow-hidden transition-all duration-300",
+                                sidebarOpen && "hover:bg-muted/50"
+                            )}
                             onClick={() => handleAccordionClick("win-servers")}
                         >
                             <div
                                 className={cn(
-                                    "absolute left-0 w-[56px] h-full flex items-center justify-center transition-all duration-300",
+                                    "absolute inset-0 flex items-center justify-center transition-all duration-300",
                                     sidebarOpen
                                         ? "-translate-x-full opacity-0"
                                         : "translate-x-0 opacity-100",
                                 )}
                             >
-                                <Monitor
-                                    className={cn(
-                                        "h-5 w-5 transition-colors",
-                                        openMenus["win-servers"]
-                                            ? "text-primary"
-                                            : "text-muted-foreground/60",
-                                    )}
-                                />
+                                <div className={cn(
+                                    "transition-all duration-150 active:scale-95",
+                                    !sidebarOpen && "w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20"
+                                )}>
+                                    <Monitor
+                                        className={cn(
+                                            "h-5 w-5 transition-colors duration-150",
+                                            openMenus["win-servers"]
+                                                ? "text-primary"
+                                                : "text-muted-foreground/60 hover:text-primary",
+                                        )}
+                                    />
+                                </div>
                             </div>
                             <div
                                 className={cn(
@@ -548,7 +588,7 @@ export default function AppSidebar({
                         <div className="overflow-hidden">
                             <div
                                 className={cn(
-                                    "flex flex-col gap-0.5 transition-all duration-300 overflow-hidden",
+                                    "flex flex-col gap-1 transition-all duration-300 overflow-hidden",
                                     !sidebarOpen
                                         ? "bg-muted/30 border border-border/40 rounded-xl py-1 shadow-inner"
                                         : "bg-muted/10 border border-border/30 rounded-xl py-1 px-1 mt-1 mb-2 mx-2",
@@ -605,7 +645,7 @@ export default function AppSidebar({
                                                             variant="outline"
                                                             size="icon"
                                                             className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground shadow-sm bg-background transition-all active:scale-90"
-                                                            onClick={handleEditWinServer}
+                                                            onClick={modals.openEditWinServer}
                                                         >
                                                             <MoreVertical className="h-4 w-4" />
                                                         </Button>
@@ -649,7 +689,7 @@ export default function AppSidebar({
                                 </div>
 
                                 {activeWinServerId && (
-                                    <div className="flex flex-col gap-0.5 mt-1 border-t border-border/20 pt-1 px-1">
+                                    <div className="flex flex-col gap-1 mt-1 border-t border-border/20 pt-1 px-1">
                                         <MenuItem path="/win/performance" icon={Activity} label={t("dashboard.performance")} />
                                         <MenuItem path="/win/services" icon={ServerCog} label={t("dashboard.services")} />
                                         <MenuItem path="/win/terminal" icon={TerminalSquare} label={t("dashboard.terminal")} />
@@ -658,17 +698,21 @@ export default function AppSidebar({
 
                                 <SidebarTooltip label={t("dashboard.addWinServer")}>
                                     <Button
-                                        onClick={openAddWinServerModal} variant="ghost"
-                                        className="w-full flex items-center justify-start p-0 h-10 font-normal transition-colors duration-300 rounded-lg group text-info hover:bg-info/10 mt-1"
+                                        onClick={modals.openAddWinServer} variant="ghost"
+                                        className={cn(
+                                            "flex items-center justify-start p-0 h-10 font-medium transition-all duration-150 rounded-lg group text-info hover:bg-info/10 mt-1 active:scale-95 focus:ring-0 focus-visible:ring-0 outline-none antialiased",
+                                            sidebarOpen ? "w-full" : "w-10 mx-auto"
+                                        )}
                                     >
                                         <div
                                             className={cn(
-                                                "w-[56px] h-full shrink-0 flex items-center justify-center transition-colors duration-300",
+                                                "h-full shrink-0 flex items-center justify-center transition-all duration-75",
+                                                sidebarOpen ? "w-[56px]" : "w-full"
                                             )}
                                         >
                                             <PlusCircle
                                                 className={cn(
-                                                    "transition-colors duration-300",
+                                                    "transition-colors duration-150",
                                                     sidebarOpen ? "h-4 w-4" : "h-5 w-5",
                                                 )}
                                             />
@@ -692,28 +736,36 @@ export default function AppSidebar({
                     </div>
                 </div>
 
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-1">
                     <SidebarTooltip label={t("dashboard.linServers")}>
                         <div
-                            className="relative flex items-center w-full h-9 cursor-pointer hover:bg-muted/50 rounded-lg mb-1 overflow-hidden"
+                            className={cn(
+                                "relative flex items-center w-full h-10 cursor-pointer rounded-lg mb-1 overflow-hidden transition-all duration-300",
+                                sidebarOpen && "hover:bg-muted/50"
+                            )}
                             onClick={() => handleAccordionClick("lin-servers")}
                         >
                             <div
                                 className={cn(
-                                    "absolute left-0 w-[56px] h-full flex items-center justify-center transition-all duration-300",
+                                    "absolute inset-0 flex items-center justify-center transition-all duration-300",
                                     sidebarOpen
                                         ? "-translate-x-full opacity-0"
                                         : "translate-x-0 opacity-100",
                                 )}
                             >
-                                <TerminalSquare
-                                    className={cn(
-                                        "h-5 w-5 transition-colors",
-                                        openMenus["lin-servers"]
-                                            ? "text-primary"
-                                            : "text-muted-foreground/60",
-                                    )}
-                                />
+                                <div className={cn(
+                                    "transition-all duration-150 active:scale-95",
+                                    !sidebarOpen && "w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20"
+                                )}>
+                                    <TerminalSquare
+                                        className={cn(
+                                            "h-5 w-5 transition-colors duration-150",
+                                            openMenus["lin-servers"]
+                                                ? "text-primary"
+                                                : "text-muted-foreground/60 hover:text-primary",
+                                        )}
+                                    />
+                                </div>
                             </div>
                             <div
                                 className={cn(
@@ -746,7 +798,7 @@ export default function AppSidebar({
                         <div className="overflow-hidden">
                             <div
                                 className={cn(
-                                    "flex flex-col gap-0.5 transition-all duration-300 overflow-hidden",
+                                    "flex flex-col gap-1 transition-all duration-300 overflow-hidden",
                                     !sidebarOpen
                                         ? "bg-muted/30 border border-border/40 rounded-xl py-1 shadow-inner"
                                         : "bg-muted/10 border border-border/30 rounded-xl py-1 px-1 mt-1 mb-2 mx-2",
@@ -810,16 +862,20 @@ export default function AppSidebar({
                                 <SidebarTooltip label={t("dashboard.addLinServer")}>
                                     <Button
                                         variant="ghost"
-                                        className="w-full flex items-center justify-start p-0 h-10 font-normal transition-colors duration-300 rounded-lg group text-warning hover:bg-warning/10 mt-1"
+                                        className={cn(
+                                            "flex items-center justify-start p-0 h-10 font-medium transition-all duration-150 rounded-lg group text-warning hover:bg-warning/10 mt-1 active:scale-95 focus:ring-0 focus-visible:ring-0 outline-none antialiased",
+                                            sidebarOpen ? "w-full" : "w-10 mx-auto"
+                                        )}
                                     >
                                         <div
                                             className={cn(
-                                                "w-[56px] h-full shrink-0 flex items-center justify-center transition-colors duration-300",
+                                                "h-full shrink-0 flex items-center justify-center transition-all duration-75",
+                                                sidebarOpen ? "w-[56px]" : "w-full"
                                             )}
                                         >
                                             <PlusCircle
                                                 className={cn(
-                                                    "transition-colors duration-300",
+                                                    "transition-colors duration-150",
                                                     sidebarOpen ? "h-4 w-4" : "h-5 w-5",
                                                 )}
                                             />
@@ -845,48 +901,35 @@ export default function AppSidebar({
             </nav>
 
             <div className={cn(
-                "p-3 border-t bg-muted/20 shrink-0 flex flex-col gap-2 transition-all duration-300",
+                "p-3 border-t bg-muted/5 shrink-0 flex flex-col gap-2 transition-all duration-300",
                 !sidebarOpen && "items-center"
             )}>
                 <div className={cn(
                     "flex gap-2 w-full transition-all duration-300",
-                    sidebarOpen ? "flex-row" : "flex-col items-center"
+                    sidebarOpen ? "flex-col" : "flex-col items-center"
                 )}>
+                    {/* Removed Notifications and Settings buttons from bottom */}
+
                     <SidebarTooltip label={t("dashboard.backToEnvs")}>
-                        <Button
-                            variant="ghost"
-                            className={cn(
-                                "flex items-center justify-start p-0 h-10 font-bold transition-all duration-300 rounded-xl group overflow-hidden bg-destructive/10 text-destructive hover:bg-destructive hover:text-white",
-                                sidebarOpen ? "flex-1" : "w-10"
-                            )}
-                            onClick={onDisconnect}
-                        >
+                         <Button
+                             variant="ghost"
+                             className={cn(
+                                 "flex items-center justify-start p-0 h-10 font-bold transition-all duration-300 rounded-xl group overflow-hidden bg-destructive/10 text-destructive hover:bg-destructive hover:text-white focus:ring-0 focus-visible:ring-0 outline-none antialiased active:scale-95",
+                                 sidebarOpen ? "w-full" : "w-10 mx-auto"
+                             )}
+                             onClick={onDisconnect}
+                         >
                             <div className={cn(
-                                "h-full shrink-0 flex items-center justify-center transition-all duration-300",
+                                "h-full shrink-0 flex items-center justify-center transition-all duration-75",
                                 sidebarOpen ? "w-[48px]" : "w-full"
                             )}>
-                                <LogOut className="h-5 w-5" />
+                                <LogOut className="h-5 w-5 transition-colors duration-150" />
                             </div>
                             {sidebarOpen && (
                                 <span className="truncate text-xs pr-3">
                                     {t("dashboard.backToEnvs")}
                                 </span>
                             )}
-                        </Button>
-                    </SidebarTooltip>
-
-                    <SidebarTooltip label={t("dashboard.settings")}>
-                        <Button
-                            variant="ghost"
-                            className={cn(
-                                "flex items-center justify-center p-0 h-10 transition-all duration-300 rounded-xl group overflow-hidden bg-primary/10 text-primary hover:bg-primary/20",
-                                sidebarOpen ? "w-10" : "w-10"
-                            )}
-                            onClick={() => navigate("/settings")}
-                        >
-                            <div className="h-full w-full flex items-center justify-center">
-                                <Settings className="h-5 w-5" />
-                            </div>
                         </Button>
                     </SidebarTooltip>
                 </div>

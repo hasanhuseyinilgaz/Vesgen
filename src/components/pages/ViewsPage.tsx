@@ -30,6 +30,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useDatabaseContext } from "@/contexts/DatabaseContext";
+import ConnectionRequired from "@/components/ConnectionRequired";
 
 export interface View {
   TABLE_NAME: string;
@@ -37,6 +39,7 @@ export interface View {
 
 export default function ViewsPage() {
   const { t } = useTranslation();
+  const { isDbConnected } = useDatabaseContext();
   const [views, setViews] = useState<View[]>([]);
   const [activeTab, setActiveTab] = useState<"data" | "code">("data");
   const [viewDefinition, setViewDefinition] = useState<string>("");
@@ -75,9 +78,11 @@ export default function ViewsPage() {
   const { config, loadConfig } = useSettings();
 
   useEffect(() => {
-    loadViews();
-    loadConfig();
-  }, [loadConfig]);
+    if (isDbConnected) {
+      loadViews();
+      loadConfig();
+    }
+  }, [loadConfig, isDbConnected]);
 
   useEffect(() => {
     if (selectedView) {
@@ -130,6 +135,27 @@ export default function ViewsPage() {
     }
     exportToExcel(tableData, `View_${selectedView}`);
   };
+
+  if (!isDbConnected) {
+    return (
+      <PageLayout
+        sidebar={
+          <SearchableListPanel
+            title={t("views.title")}
+            icon={Code}
+            items={[]}
+            selectedItemId={null}
+            onSelect={() => {}}
+            onRefresh={() => {}}
+            loading={false}
+            description={t("common.noConnection", "Bağlantı Yok")}
+          />
+        }
+      >
+        <ConnectionRequired />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout

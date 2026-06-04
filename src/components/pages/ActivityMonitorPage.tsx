@@ -10,9 +10,12 @@ import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import ActivityMonitorRefreshPanel from "@/components/ActivityMonitorRefreshPanel";
 import PageLayout from "@/components/PageLayout";
+import { useDatabaseContext } from "@/contexts/DatabaseContext";
+import ConnectionRequired from "@/components/ConnectionRequired";
 
 export default function ActivityMonitorPage() {
   const { t } = useTranslation();
+  const { isDbConnected } = useDatabaseContext();
   const {
     activityData,
     healthData,
@@ -28,8 +31,29 @@ export default function ActivityMonitorPage() {
   } = useSystemMonitor();
 
   useEffect(() => {
-    loadAllData();
-  }, []);
+    if (isDbConnected) {
+      loadAllData();
+    }
+  }, [isDbConnected]);
+
+  if (!isDbConnected) {
+    return (
+      <PageLayout>
+        <div className="flex-1 flex flex-col gap-6 p-6 min-h-0 min-w-0 w-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+          <PageHeader
+            title={t("activity.title")}
+            icon={Activity}
+            description={t("activity.description")}
+            showLimitSelector={false}
+            showFilterButton={false}
+            showLiveButton={false}
+            showRefreshButton={false}
+          />
+          <ConnectionRequired />
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout>

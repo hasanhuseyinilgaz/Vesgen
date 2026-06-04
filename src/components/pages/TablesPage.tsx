@@ -14,6 +14,7 @@ import {
   type Edge,
 } from "@xyflow/react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 import { exportToExcel } from "@/lib/exportUtils";
 import { useTableData } from "@/hooks/useTableData";
@@ -35,6 +36,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useDatabaseContext } from "@/contexts/DatabaseContext";
+import ConnectionRequired from "@/components/ConnectionRequired";
 
 export interface Table {
   TABLE_NAME: string;
@@ -42,6 +45,7 @@ export interface Table {
 
 export default function TablesPage() {
   const { t } = useTranslation();
+  const { isDbConnected } = useDatabaseContext();
   const [tables, setTables] = useState<Table[]>([]);
   const [activeTab, setActiveTab] = useState<"data" | "schema">("data");
   const [isDiagramModalOpen, setIsDiagramModalOpen] = useState(false);
@@ -81,9 +85,11 @@ export default function TablesPage() {
   const { config, loadConfig } = useSettings();
 
   useEffect(() => {
-    loadTables();
-    loadConfig();
-  }, [loadConfig]);
+    if (isDbConnected) {
+      loadTables();
+      loadConfig();
+    }
+  }, [loadConfig, isDbConnected]);
 
   useEffect(() => {
     if (selectedTable && activeTab === "schema")
@@ -101,7 +107,18 @@ export default function TablesPage() {
     setLoading(true);
     try {
       const result = await window.electronAPI?.dbGetTables();
-      if (result?.success) setTables(result.data || []);
+      if (result?.success) {
+        setTables(result.data || []);
+      } else {
+        toast.error(t("common.error"), {
+          description: result?.message || t("tables.failedToLoad")
+        });
+        setTables([]);
+      }
+    } catch (error: any) {
+      toast.error(t("common.error"), {
+        description: error.message
+      });
     } finally {
       setLoading(false);
     }
@@ -270,6 +287,27 @@ export default function TablesPage() {
       return false;
     }
   };
+
+  if (!isDbConnected) {
+    return (
+      <PageLayout
+        sidebar={
+          <SearchableListPanel
+            title={t("tables.title")}
+            icon={Database}
+            items={[]}
+            selectedItemId={null}
+            onSelect={() => {}}
+            onRefresh={() => {}}
+            loading={false}
+            description={t("common.noConnection", "Bağlantı Yok")}
+          />
+        }
+      >
+        <ConnectionRequired />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout

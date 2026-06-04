@@ -13,9 +13,23 @@ import TitleBar from "./components/layout/TitleBar";
 import { APP_INFO } from "./lib/constants";
 import { useEffect } from "react";
 import { Toaster } from "sonner";
+import { ModalProvider } from "./contexts/ModalContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
+import { HealthProvider } from "./contexts/HealthContext";
+import { useTranslation } from "react-i18next";
 
 function App() {
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
+  const { t, i18n } = useTranslation();
+
+  useEffect(() => {
+    if ((window as any).electronAPI?.appSetTrayLanguage) {
+      (window as any).electronAPI.appSetTrayLanguage({
+        show: t("tray.show", "Vesgen'i Göster"),
+        quit: t("tray.quit", "Çıkış Yap (Tamamen Kapat)")
+      });
+    }
+  }, [i18n.language, t]);
 
   useEffect(() => {
     const updateCSSVariables = async () => {
@@ -56,45 +70,51 @@ function App() {
       defaultTheme="dark"
       storageKey={`${APP_INFO.NAME.toLowerCase()}-ui-theme`}
     >
-      <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-        <Toaster
-          position="bottom-right"
-          richColors
-          closeButton={false}
-          swipeDirections={["right"]}
-          toastOptions={{ duration: 3500 }}
-        />
-        <TitleBar />
-        <div className="flex-1 relative overflow-hidden">
-          <Router>
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  !activeTenantId ? (
-                    <TenantsPage onSelectTenant={handleTenantSelect} />
-                  ) : (
-                    <Navigate to="/overview" replace />
-                  )
-                }
-              />
-              <Route
-                path="/*"
-                element={
-                  activeTenantId ? (
-                    <AppLayout
-                      activeTenantId={activeTenantId}
-                      onDisconnect={handleDisconnect}
+      <ModalProvider>
+        <NotificationProvider>
+          <HealthProvider>
+            <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
+              <TitleBar />
+              <div className="flex-1 relative overflow-hidden">
+                <Router>
+                  <Routes>
+                    <Route
+                      path="/"
+                      element={
+                        !activeTenantId ? (
+                          <TenantsPage onSelectTenant={handleTenantSelect} />
+                        ) : (
+                          <Navigate to="/overview" replace />
+                        )
+                      }
                     />
-                  ) : (
-                    <Navigate to="/" replace />
-                  )
-                }
-              />
-            </Routes>
-          </Router>
-        </div>
-      </div>
+                    <Route
+                      path="/*"
+                      element={
+                        activeTenantId ? (
+                          <AppLayout
+                            activeTenantId={activeTenantId}
+                            onDisconnect={handleDisconnect}
+                          />
+                        ) : (
+                          <Navigate to="/" replace />
+                        )
+                      }
+                    />
+                  </Routes>
+                </Router>
+                <Toaster
+                  position="bottom-right"
+                  richColors
+                  closeButton={false}
+                  swipeDirections={["right"]}
+                  toastOptions={{ duration: 3500 }}
+                />
+              </div>
+            </div>
+          </HealthProvider>
+        </NotificationProvider>
+      </ModalProvider>
     </ThemeProvider>
   );
 }

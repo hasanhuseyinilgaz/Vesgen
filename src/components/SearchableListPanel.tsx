@@ -19,9 +19,10 @@ interface SearchableListPanelProps {
   items: SearchableListItem[];
   selectedItemId: string | null;
   onSelect: (id: string) => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   loading: boolean;
   searchPlaceholder?: string;
+  description?: string;
 }
 
 export default function SearchableListPanel({
@@ -33,6 +34,7 @@ export default function SearchableListPanel({
   onRefresh,
   loading,
   searchPlaceholder,
+  description,
 }: SearchableListPanelProps) {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
@@ -56,14 +58,21 @@ export default function SearchableListPanel({
             <Button
               variant="ghost"
               size="icon"
-              onClick={onRefresh}
+              onClick={() => onRefresh?.()}
               className="hover:bg-primary/10 hover:text-primary transition-colors"
-              disabled={loading}
+              disabled={loading || !onRefresh}
             >
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </Button>
           </ActionTooltip>
         </div>
+        {description && (
+          <div className="px-1">
+            <p className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60 leading-none">
+              {description}
+            </p>
+          </div>
+        )}
         <div className="relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -83,16 +92,21 @@ export default function SearchableListPanel({
             key={item.id}
             variant="ghost"
             className={cn(
-              "w-full justify-start text-sm font-medium truncate transition-colors group",
+              "w-full justify-start text-sm font-medium truncate transition-colors duration-200 ease-in-out group active:scale-95 focus:ring-0 focus-visible:ring-0 outline-none antialiased",
               selectedItemId === item.id
-                ? "bg-primary/10 text-primary hover:bg-primary/15"
+                ? "bg-primary/10 text-primary hover:bg-primary hover:text-white"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
-            onClick={() => onSelect(item.id)}
+            onClick={() => {
+              if (selectedItemId === item.id) return;
+              onSelect(item.id);
+            }}
           >
             <Icon className={cn(
-              "h-4 w-4 mr-2 shrink-0",
-              selectedItemId === item.id ? "opacity-100" : "opacity-70 group-hover:opacity-100"
+              "h-4 w-4 mr-2 shrink-0 transition-colors duration-200 ease-in-out",
+              selectedItemId === item.id 
+                ? "opacity-100 text-primary group-hover:text-white" 
+                : "opacity-70 group-hover:opacity-100"
             )} />
             <span className="truncate">{item.label}</span>
           </Button>

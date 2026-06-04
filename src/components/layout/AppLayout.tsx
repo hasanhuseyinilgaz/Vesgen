@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import AppSidebar from "./AppSidebar";
 import { useDatabase } from "@/hooks/useDatabase";
 import { useWinServer } from "@/hooks/useWinServer";
+import { useModals } from "@/contexts/ModalContext";
+import { DatabaseProvider } from "@/contexts/DatabaseContext";
 import { Tenant } from "@/types";
 
 // Modals
@@ -26,6 +27,7 @@ import SqlJobsPage from "@/components/pages/SqlJobsPage";
 import ActivityMonitorPage from "@/components/pages/ActivityMonitorPage";
 import DatabaseMaintenancePage from "@/components/pages/DatabaseMaintenancePage";
 import SettingsPage from "@/components/pages/SettingsPage";
+import NotificationsPage from "@/components/pages/NotificationsPage";
 
 interface AppLayoutProps {
   activeTenantId: string;
@@ -33,16 +35,10 @@ interface AppLayoutProps {
 }
 
 export default function AppLayout({ activeTenantId, onDisconnect }: AppLayoutProps) {
-  const { t } = useTranslation();
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Modal States
-  const [isAddDbModalOpen, setIsAddDbModalOpen] = useState(false);
-  const [isDbSettingsModalOpen, setIsDbSettingsModalOpen] = useState(false);
-  const [isAddWinServerModalOpen, setIsAddWinServerModalOpen] = useState(false);
-  const [isEditWinServerModalOpen, setIsEditWinServerModalOpen] = useState(false);
+  const modals = useModals();
 
   const loadTenantInfo = useCallback(async () => {
     try {
@@ -60,61 +56,76 @@ export default function AppLayout({ activeTenantId, onDisconnect }: AppLayoutPro
     loadTenantInfo();
   }, [loadTenantInfo]);
 
-  // Hooks
   const dbConfig = useDatabase(tenant, loadTenantInfo);
   const winConfig = useWinServer(tenant, loadTenantInfo);
 
   const activeWinServer = tenant?.windowsServers?.find(s => s.id === winConfig.activeWinServerId);
 
+  const location = useLocation();
+  useEffect(() => {
+    if ((window as any).electronAPI?.appPageChanged) {
+      (window as any).electronAPI.appPageChanged(location.pathname);
+    }
+
+    if (location.pathname.startsWith("/database") && !dbConfig.isDbConnected && !dbConfig.isConnectingDb) {
+      console.log("Database page detected while disconnected, attempting auto-reconnect...");
+      dbConfig.connectToActiveDatabase();
+    }
+  }, [location.pathname, dbConfig.isDbConnected, dbConfig.isConnectingDb, dbConfig.connectToActiveDatabase]);
+
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
-      <AppSidebar
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        tenant={tenant}
-        activeDatabaseId={dbConfig.activeDatabaseId}
-        setActiveDatabaseId={dbConfig.setActiveDatabaseId}
-        isConnectingDb={dbConfig.isConnectingDb}
-        activeWinServerId={winConfig.activeWinServerId}
-        setActiveWinServerId={winConfig.setActiveWinServerId}
-        onDisconnect={onDisconnect}
-        openAddDbModal={() => setIsAddDbModalOpen(true)}
-        openDbSettingsModal={() => setIsDbSettingsModalOpen(true)}
-        openAddWinServerModal={() => setIsAddWinServerModalOpen(true)}
-        handleEditWinServer={() => setIsEditWinServerModalOpen(true)}
-      />
+      <DatabaseProvider value={{
+        isDbConnected: dbConfig.isDbConnected,
+        isConnectingDb: dbConfig.isConnectingDb,
+        activeDatabaseId: dbConfig.activeDatabaseId,
+        refreshConnection: dbConfig.refreshConnection
+      }}>
+        <AppSidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          tenant={tenant}
+          activeDatabaseId={dbConfig.activeDatabaseId}
+          setActiveDatabaseId={dbConfig.setActiveDatabaseId}
+          isConnectingDb={dbConfig.isConnectingDb}
+          activeWinServerId={winConfig.activeWinServerId}
+          setActiveWinServerId={winConfig.setActiveWinServerId}
+          onDisconnect={onDisconnect}
+        />
 
-      <main className="flex-1 min-w-0 relative flex flex-col h-full overflow-hidden">
-        <Routes>
-          {/* Overview Routes */}
-          <Route path="/" element={<OverviewPage tenant={tenant} />} />
-          <Route path="/overview" element={<OverviewPage tenant={tenant} />} />
+        <main className="flex-1 min-w-0 relative flex flex-col h-full overflow-hidden">
+          <Routes>
+            {/* Overview Routes */}
+            <Route path="/" element={<OverviewPage tenant={tenant} />} />
+            <Route path="/overview" element={<OverviewPage tenant={tenant} />} />
 
-          {/* Windows Server Routes */}
-          <Route path="/win/performance" element={activeWinServer ? <WinPerformancePage server={activeWinServer} /> : <Navigate to="/" replace />} />
-          <Route path="/win/services" element={activeWinServer ? <WinServicesPage server={activeWinServer} /> : <Navigate to="/" replace />} />
-          <Route path="/win/terminal" element={activeWinServer ? <WinTerminalPage server={activeWinServer} /> : <Navigate to="/" replace />} />
+            {/* Windows Server Routes */}
+            <Route path="/win/performance" element={activeWinServer ? <WinPerformancePage server={activeWinServer} /> : <Navigate to="/" replace />} />
+            <Route path="/win/services" element={activeWinServer ? <WinServicesPage server={activeWinServer} tenantId={tenant?.id || ""} /> : <Navigate to="/" replace />} />
+            <Route path="/win/terminal" element={activeWinServer ? <WinTerminalPage server={activeWinServer} /> : <Navigate to="/" replace />} />
 
-          {/* Database Routes */}
-          <Route path="/database/tables" element={<TablesPage />} />
-          <Route path="/database/views" element={<ViewsPage />} />
-          <Route path="/database/queries" element={<QueriesPage />} />
-          <Route path="/database/procedures" element={<StoredProceduresPage />} />
-          <Route path="/database/jobs" element={<SqlJobsPage />} />
-          <Route path="/database/activity" element={<ActivityMonitorPage />} />
-          <Route path="/database/maintenance" element={<DatabaseMaintenancePage />} />
+            {/* Database Routes */}
+            <Route path="/database/tables" element={<TablesPage />} />
+            <Route path="/database/views" element={<ViewsPage />} />
+            <Route path="/database/queries" element={<QueriesPage />} />
+            <Route path="/database/procedures" element={<StoredProceduresPage />} />
+            <Route path="/database/jobs" element={<SqlJobsPage />} />
+            <Route path="/database/activity" element={<ActivityMonitorPage />} />
+            <Route path="/database/maintenance" element={<DatabaseMaintenancePage />} />
 
-          {/* Global Routes */}
-          <Route path="/settings" element={<SettingsPage />} />
+            {/* Global Routes */}
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
 
-          <Route path="*" element={<Navigate to="/overview" replace />} />
-        </Routes>
-      </main>
+            <Route path="*" element={<Navigate to="/overview" replace />} />
+          </Routes>
+        </main>
+      </DatabaseProvider>
 
       {/* Modals */}
       <AddDatabaseModal
-        isOpen={isAddDbModalOpen}
-        onClose={() => setIsAddDbModalOpen(false)}
+        isOpen={modals.isAddDatabaseOpen}
+        onClose={modals.closeAddDatabase}
         onSave={dbConfig.handleSaveDatabase}
         isSaving={dbConfig.isSaving}
         isTesting={dbConfig.isTesting}
@@ -123,8 +134,8 @@ export default function AppLayout({ activeTenantId, onDisconnect }: AppLayoutPro
       />
 
       <DatabaseSettingsModal
-        isOpen={isDbSettingsModalOpen}
-        onClose={() => setIsDbSettingsModalOpen(false)}
+        isOpen={modals.isDbSettingsOpen}
+        onClose={modals.closeDbSettings}
         tenant={tenant}
         activeDatabaseId={dbConfig.activeDatabaseId}
         onUpdate={dbConfig.handleUpdateDatabase}
@@ -137,8 +148,8 @@ export default function AppLayout({ activeTenantId, onDisconnect }: AppLayoutPro
       />
 
       <AddWinServerModal
-        isOpen={isAddWinServerModalOpen}
-        onClose={() => setIsAddWinServerModalOpen(false)}
+        isOpen={modals.isAddWinServerOpen}
+        onClose={modals.closeAddWinServer}
         onSave={winConfig.handleSaveWinServer}
         isSaving={winConfig.isSaving}
         isTesting={winConfig.isTesting}
@@ -147,8 +158,8 @@ export default function AppLayout({ activeTenantId, onDisconnect }: AppLayoutPro
       />
 
       <EditWinServerModal
-        isOpen={isEditWinServerModalOpen}
-        onClose={() => setIsEditWinServerModalOpen(false)}
+        isOpen={modals.isEditWinServerOpen}
+        onClose={modals.closeEditWinServer}
         tenant={tenant}
         activeWinServerId={winConfig.activeWinServerId}
         onUpdate={winConfig.handleUpdateWinServer}

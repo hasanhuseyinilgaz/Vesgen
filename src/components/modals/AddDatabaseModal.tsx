@@ -11,7 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Database, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Database, Loader2, CheckCircle2, XCircle, ShieldOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface AddDatabaseModalProps {
     isOpen: boolean;
@@ -38,6 +39,7 @@ export default function AddDatabaseModal({
     const [dbName, setDbName] = useState("");
     const [dbUser, setDbUser] = useState("");
     const [dbPassword, setDbPassword] = useState("");
+    const [excludeFromMonitoring, setExcludeFromMonitoring] = useState(false);
 
     const getParams = () => ({
         alias: dbAlias,
@@ -45,6 +47,7 @@ export default function AddDatabaseModal({
         databaseName: dbName,
         user: dbUser,
         password: dbPassword,
+        excludeFromMonitoring,
     });
 
     const handleSave = async () => {
@@ -55,6 +58,7 @@ export default function AddDatabaseModal({
             setDbName("");
             setDbUser("");
             setDbPassword("");
+            setExcludeFromMonitoring(false);
             onClose();
         }
     };
@@ -114,6 +118,21 @@ export default function AddDatabaseModal({
                                 onChange={(e) => setDbPassword(e.target.value)}
                             />
                         </div>
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-border/40 bg-muted/5">
+                        <div className="space-y-0.5">
+                            <Label className="text-sm font-bold flex items-center gap-2">
+                                <ShieldOff className="w-3.5 h-3.5 text-orange-500" />
+                                {t("dashboard.excludeFromMonitoring")}
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground font-medium">
+                                {t("dashboard.excludeFromMonitoringDesc")}
+                            </p>
+                        </div>
+                        <Switch 
+                            checked={excludeFromMonitoring}
+                            onCheckedChange={setExcludeFromMonitoring}
+                        />
                     </div>
                     {testResult && (
                         <div

@@ -59,6 +59,8 @@
     "fillAllFields": "Please fill in all connection details.",
     "testConnection": "Test Connection",
     "saveAndConnect": "Save & Connect",
+    "excludeFromMonitoring": "Exclude from Monitoring",
+    "excludeFromMonitoringDesc": "Disables automatic checks for resources requiring VPN.",
     "update": "Update",
     "editDbTitle": "Database Settings",
     "editDbDesc": "Update the selected database details or remove the connection from the system.",
@@ -76,8 +78,8 @@
     "tabDatabases": "Databases",
     "tabServers": "Servers",
     "systemOverview": "System Overview",
-    "welcomeBack": "Welcome Back",
-    "overviewDescription": "The real-time status and health of all your resources (databases, servers, performance) are aggregated in a single panel.",
+    "activeEnvSummary": "Active Environment Summary",
+    "overviewDescription": "Real-time status and health data for resources (databases, servers, performance) in this environment.",
     "databases": "Databases",
     "servers": "Servers",
     "quickActions": "Quick Actions",
@@ -96,7 +98,35 @@
     "performanceOptimal": "Performance Optimal",
     "performanceDesc": "Resource usage and response times are within expected ranges.",
     "sustainability": "Sustainability",
-    "sustainabilityDesc": "System capacity is sufficient for future load increases."
+    "sustainabilityDesc": "System capacity is sufficient for future load increases.",
+    "fleetHealth": "Fleet Health",
+    "lastSync": "Last Sync",
+    "allSystemsOperational": "All Systems Operational",
+    "partialOutage": "Partial Outage",
+    "systemDown": "System Down",
+    "monitoringActive": "Monitoring Active",
+    "partialOutageDesc": "{{count}} resources are not online.",
+    "systemDownDesc": "System connection completely lost!",
+    "retrying": "Retrying",
+    "secondsAgo": "s Ago",
+    "minutesAgo": "m Ago",
+    "justNow": "Just Now",
+    "resourcesOnline": "RESOURCES ONLINE",
+    "refreshing": "Refreshing...",
+    "noConnection": "No Connection",
+    "noServerConnection": "NO SERVER CONNECTION",
+    "performanceNoConnectionDesc": "System resources are unreachable.",
+    "performanceNoServerDesc": "Waiting for server connection to read performance metrics.",
+    "performanceWarning": "Performance Degraded",
+    "performanceCritical": "Critical Performance Loss",
+    "systemStable": "SYSTEM STABLE",
+    "systemStability": "System Stability",
+    "statusInfraDown": "INFRA DOWN",
+    "statusDegraded": "DEGRADED",
+    "statusStable": "STABLE",
+    "statusDisconnected": "DISCONNECTED",
+    "sustainabilityNoConnectionDesc": "Session info unavailable.",
+    "sustainabilityStable": "Capacity management is stable with {{count}} active sessions."
   },
   "queries": {
     "title": "Queries",
@@ -153,9 +183,10 @@
     "title": "Tables",
     "pageTitle": "Table Management",
     "pageDescription": "List database tables, filter data and inspect relationships.",
+    "readyToTable": "Table Selection Ready",
+    "selectToStart": "Select a table from the left menu to start.",
     "activeTable": "Active Table",
     "readyToView": "Table Data Ready",
-    "selectToStart": "Select a table from the left menu to start.",
     "tabData": "Table Data",
     "tabSchema": "Schema & Relations",
     "recordUpdated": "Record updated.",
@@ -510,6 +541,7 @@
     }
   },
   "common": {
+    "global": "GLOBAL",
     "cancel": "Cancel",
     "confirm": "Confirm",
     "refresh": "Refresh",
@@ -521,7 +553,11 @@
     "saveChanges": "Save Changes",
     "giveUp": "Give Up",
     "minimize": "Minimize",
-    "expand": "Expand"
+    "collapse": "Collapse Menu",
+    "expand": "Expand",
+    "close": "Close",
+    "info": "Info",
+    "aboutApp": "ABOUT"
   },
   "settings": {
     "title": "System Settings",
@@ -560,6 +596,9 @@
     "indexOptimization": "Index Optimization",
     "warningLevel": "Warning Level (% Fragmentation)",
     "criticalLevel": "Critical Level (% Fragmentation - Rebuild)",
+    "monitoringTitle": "Service & Monitoring Settings",
+    "monitoringInterval": "Monitoring Interval (Seconds)",
+    "monitoringIntervalDesc": "Set the frequency for automatic background health and connection checks.",
     "statisticsGeneral": "Statistics & General",
     "staleThreshold": "Statistics Stale Warning Limit (%)",
     "permissions": {
@@ -614,7 +653,27 @@
     "updateError": "Update operation failed.",
     "systemErrorUpdate": "System Error: Update failed!",
     "deleteSuccess": "Workspace deleted successfully from the system.",
-    "systemErrorDeletion": "System Error: Exception during deletion!"
+    "systemErrorDeletion": "System Error: Exception during deletion!",
+    "heroTagline": "Take full control of your infrastructure",
+    "heroSubtitle": "SQL Server management, live server monitoring, script execution, and role-based access — all in one platform.",
+    "heroStatEnvs": "Workspace",
+    "heroStatDbs": "Database",
+    "heroStatServers": "Server",
+    "heroStatTotal": "Total Resources",
+    "featureMonitoringTitle": "Live Monitoring",
+    "featureMonitoringDesc": "Track CPU, RAM, Disk, and Network metrics in real-time.",
+    "featureSqlTitle": "SQL Server Management",
+    "featureSqlDesc": "Tables, stored procedures, job scheduling, and index optimization.",
+    "featureScriptsTitle": "Script Execution",
+    "featureScriptsDesc": "Write custom SQL queries and manage your saved scripts.",
+    "featurePermsTitle": "Permission Control",
+    "featurePermsDesc": "Protect critical operations with admin approval workflows.",
+    "recentNotifications": "Recent Notifications",
+    "viewAllNotifications": "View All",
+    "noRecentNotifications": "No notifications yet",
+    "noRecentNotificationsDesc": "System activities will appear here.",
+    "selectEnvironment": "Select a Workspace",
+    "selectEnvironmentDesc": "Choose a workspace to get started or create a new one."
   },
   "winPerformance": {
     "title": "Windows Performance Monitor",
@@ -659,5 +718,77 @@
     "waitingForEnd": "Waiting for bit...",
     "onlyForReport": "Only for Report",
     "clear": "Clear"
+  },
+  "notifications": {
+    "title": "System Notifications",
+    "description": "All registered activities in your infrastructure and servers are archived here.",
+    "unreadCount": "{{count}} Unread",
+    "markAllAsRead": "Mark All as Read",
+    "clearHistory": "Clear History",
+    "emptyHistory": "Notification Inbox is Empty",
+    "emptyHistoryDesc": "Your system is working stably. Any warnings or activities will be listed here.",
+    "markAsUnread": "Mark as Unread",
+    "markAsRead": "Mark as Read",
+    "notification": "Notification",
+    "systemRecovered": {
+      "title": "System Recovered",
+      "body": "Server {{name}} is back online."
+    },
+    "serviceStopped": {
+      "title": "Service Stopped Unexpectedly",
+      "body": "The service {{service}} on server {{name}} has crashed or stopped!"
+    },
+    "cpuHigh": {
+      "title": "Critical CPU Load",
+      "body": "CPU usage on server {{name}} reached {{value}}%!"
+    },
+    "ramHigh": {
+      "title": "Critical RAM Warning",
+      "body": "Memory usage on server {{name}} reached {{value}}%!"
+    },
+    "diskHigh": {
+      "title": "Critical Disk Usage",
+      "body": "Drive {{drive}} on server {{name}} reached {{value}}% usage!"
+    },
+    "serverOffline": {
+      "title": "Server Connection Lost",
+      "body": "Server {{name}} is unreachable. Please check the network or server status."
+    },
+    "dbOffline": {
+      "title": "Database Connection Lost",
+      "body": "{{name}} database is unreachable. Please check network or database status."
+    },
+    "serverDisconnected": {
+      "title": "Server Disconnected",
+      "body": "Server {{name}} is unreachable. Still retrying..."
+    },
+    "dbDisconnected": {
+      "title": "Database Disconnected",
+      "body": "{{name}} database is unreachable. Still retrying..."
+    },
+    "dbOfflineBatched": {
+      "title": "{{count}} Databases Disconnected",
+      "body": "The following databases are unreachable: {{names}}"
+    },
+    "serverOfflineBatched": {
+      "title": "{{count}} Servers Disconnected",
+      "body": "The following servers are unreachable: {{names}}"
+    },
+    "dbDisconnectedBatched": {
+      "title": "{{count}} Databases Disconnected",
+      "body": "The following databases are still unreachable: {{names}}"
+    },
+    "serverDisconnectedBatched": {
+      "title": "{{count}} Servers Disconnected",
+      "body": "The following servers are still unreachable: {{names}}"
+    },
+    "dbRecovered": {
+      "title": "Database Recovered",
+      "body": "{{name}} database connection successfully restored."
+    }
+  },
+  "tray": {
+    "show": "Show Vesgen",
+    "quit": "Quit (Close completely)"
   }
 }

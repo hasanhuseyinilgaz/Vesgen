@@ -19,6 +19,7 @@ import {
   TerminalSquare,
   Unlock,
   Globe,
+  Thermometer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/select";
 
 import PageLayout from "@/components/PageLayout";
+import PageHeader from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 import { useSettings } from "@/hooks/useSettings";
@@ -76,14 +78,6 @@ export default function SettingsPage() {
   // Initial setup of live styles once config is loaded
   useEffect(() => {
     if (config && !hasInitialized.current) {
-      document.documentElement.style.setProperty(
-        "--vibrancy",
-        (config.visuals?.vibrancy ?? 1.0).toString(),
-      );
-      document.documentElement.style.setProperty(
-        "--glass-opacity",
-        (config.visuals?.glassOpacity ?? 0.05).toString(),
-      );
       hasInitialized.current = true;
     }
   }, [config]);
@@ -91,16 +85,6 @@ export default function SettingsPage() {
   // Handle Live Preview & Auto-Save
   useEffect(() => {
     if (!config || !hasInitialized.current) return;
-
-    // Direct CSS Variable Updates (Live Preview)
-    document.documentElement.style.setProperty(
-      "--vibrancy",
-      (config.visuals?.vibrancy ?? 1.0).toString(),
-    );
-    document.documentElement.style.setProperty(
-      "--glass-opacity",
-      (config.visuals?.glassOpacity ?? 0.05).toString(),
-    );
 
     // Debounced Auto-Save
     const timer = setTimeout(() => {
@@ -190,30 +174,27 @@ export default function SettingsPage() {
 
   return (
     <PageLayout>
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 pb-32 bg-transparent custom-scrollbar flex justify-center relative">
-        <div className="max-w-5xl w-full space-y-8 animate-in slide-in-from-bottom-4 fade-in duration-500">
-          <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl p-4 -mx-4 sm:-mx-6 px-4 sm:px-6 rounded-2xl border border-border/50 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-            <div>
-              <h1 className="text-2xl font-black text-foreground flex items-center gap-2.5">
-                <div className="p-2 bg-primary/10 text-primary rounded-xl">
-                  <Settings className="w-6 h-6" />
-                </div>
-                {t("settings.title")}
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1 ml-12">
-                {t("settings.description")}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto min-h-[44px] justify-end">
+      <div className="flex flex-col h-full w-full bg-background p-6 lg:p-8">
+        <PageHeader
+          title={t("settings.title")}
+          description={t("settings.description")}
+          icon={Settings}
+          showFilterButton={false}
+          showRefreshButton={false}
+          showLimitSelector={false}
+          showRecordCount={false}
+          showLiveButton={false}
+          customActions={
+            <>
               {saveMessage.show && (
                 <div
                   className={cn(
-                    "flex items-center px-4 py-2 rounded-full border shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-right-2",
+                    "flex items-center px-4 py-2 rounded-full border shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-right-2 text-xs",
                     saveMessage.type === "success"
                       ? "bg-success/10 border-success/30 text-success"
                       : saveMessage.type === "info"
                         ? "bg-primary/10 border-primary/30 text-primary"
-                        : "bg-destructive/10 border-destructive/30 text-destructive",
+                        : "bg-destructive/10 border-destructive/30 text-destructive"
                   )}
                 >
                   {saveMessage.type === "success" ? (
@@ -223,21 +204,24 @@ export default function SettingsPage() {
                   ) : (
                     <AlertCircle className="w-4 h-4 mr-2" />
                   )}
-                  <span className="text-sm font-bold uppercase tracking-tight">
+                  <span className="font-bold uppercase tracking-tight">
                     {saveMessage.text}
                   </span>
                 </div>
               )}
               {saving && !saveMessage.show && (
-                <div className="flex items-center px-4 py-2 rounded-full bg-primary/10 border border-primary/30 text-primary animate-pulse">
+                <div className="flex items-center px-4 py-2 rounded-full bg-primary/10 border border-primary/30 text-primary animate-pulse text-xs">
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  <span className="text-sm font-bold uppercase tracking-tight">
+                  <span className="font-bold uppercase tracking-tight">
                     {t("settings.saving")}
                   </span>
                 </div>
               )}
-            </div>
-          </div>
+            </>
+          }
+        />
+
+        <div className="flex-1 overflow-y-auto mt-6 pr-2 custom-scrollbar space-y-8 pb-32 animate-in slide-in-from-bottom-4 fade-in duration-500">
 
           <Card className="shadow-sm border-border/60 rounded-2xl overflow-hidden relative z-10">
             <CardHeader className="bg-success/5 border-b border-border/40 pb-5">
@@ -312,68 +296,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm border-border/60 rounded-2xl overflow-hidden mt-8 relative z-10">
-            <CardHeader className="bg-primary/5 border-b border-border/40 pb-5">
-              <CardTitle className="text-xl flex items-center gap-2 text-foreground">
-                <LayoutTemplate className="w-6 h-6 text-primary" />
-                {t("settings.visualsAndGlass")}
-              </CardTitle>
-              <CardDescription className="text-sm">
-                {t("settings.visualsDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-6 bg-card p-5 rounded-xl border shadow-sm">
-                <div className="flex justify-between items-center mb-1">
-                  <Label className="font-bold text-foreground text-sm uppercase tracking-wider">
-                    {t("settings.vibrancyLevel")}
-                  </Label>
-                  <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                    {Math.round((config.visuals?.vibrancy ?? 1.0) * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1.0"
-                  step="0.01"
-                  value={config.visuals?.vibrancy ?? 1.0}
-                  onChange={(e) =>
-                    handleNestedChange("visuals", "vibrancy", Number(e.target.value))
-                  }
-                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {t("settings.vibrancyDesc")}
-                </p>
-              </div>
 
-              <div className="space-y-6 bg-card p-5 rounded-xl border shadow-sm">
-                <div className="flex justify-between items-center mb-1">
-                  <Label className="font-bold text-foreground text-sm uppercase tracking-wider">
-                    {t("settings.glassOpacity")}
-                  </Label>
-                  <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                    {Math.round((config.visuals?.glassOpacity ?? 0.05) * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1.0"
-                  step="0.01"
-                  value={config.visuals?.glassOpacity ?? 0.05}
-                  onChange={(e) =>
-                    handleNestedChange("visuals", "glassOpacity", Number(e.target.value))
-                  }
-                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                />
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {t("settings.glassOpacityDesc")}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
 
           <div className="relative mt-12">
             {!isAuthenticated && (
@@ -661,6 +584,60 @@ export default function SettingsPage() {
                           })
                         }
                       />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-sm border-border/60 rounded-2xl overflow-hidden">
+                <CardHeader className="bg-primary/5 border-b border-border/40 pb-5">
+                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
+                    <ActionTooltip
+                      label={t("settings.monitoringIntervalDesc")}
+                      side="top"
+                    >
+                      <Activity className="w-6 h-6 text-primary cursor-help" />
+                    </ActionTooltip>
+                    {t("settings.monitoringTitle")}
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    {t("settings.monitoringIntervalDesc")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="max-w-md space-y-4 bg-card p-5 rounded-xl border shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <Label className="font-bold text-foreground flex items-center gap-2">
+                        <Thermometer className="w-4 h-4 text-orange-500" />
+                        {t("settings.monitoringInterval")}
+                      </Label>
+                      <span className="text-xs font-black px-2 py-1 bg-primary/10 text-primary rounded-md">
+                        {config.ui.monitoring?.interval || 10}s
+                      </span>
+                    </div>
+                    <div className="space-y-4">
+                      <Select
+                        value={String(config.ui.monitoring?.interval || 10)}
+                        onValueChange={(val) => 
+                          handleNestedChange("ui", "monitoring", {
+                            ...config.ui.monitoring,
+                            interval: Number(val)
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-full bg-background border-border/50">
+                          <SelectValue placeholder="10s" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5 {t("dashboard.secondsAgo").replace("sn. Önce", "sn").replace("s Ago", "s")}</SelectItem>
+                          <SelectItem value="10">10 {t("dashboard.secondsAgo").replace("sn. Önce", "sn").replace("s Ago", "s")}</SelectItem>
+                          <SelectItem value="30">30 {t("dashboard.secondsAgo").replace("sn. Önce", "sn").replace("s Ago", "s")}</SelectItem>
+                          <SelectItem value="60">60 {t("dashboard.secondsAgo").replace("sn. Önce", "sn").replace("s Ago", "s")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed italic opacity-70">
+                        {t("settings.monitoringIntervalDesc")}
+                      </p>
                     </div>
                   </div>
                 </CardContent>

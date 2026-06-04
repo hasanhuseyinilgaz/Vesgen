@@ -16,7 +16,11 @@ interface PageHeaderProps {
   title: string;
   icon?: React.ElementType;
   description?: string;
-  badges?: Array<{ label: string; value?: string | number }>;
+  badges?: Array<{
+    label: string;
+    value?: string | number;
+    className?: string;
+  }>;
   customActions?: React.ReactNode;
   variant?: "card" | "ghost";
   className?: string;
@@ -112,7 +116,8 @@ export default function PageHeader({
                       badge.value === "MODIFIED" || badge.value === "DEĞİŞTİRİLDİ"
                         ? "bg-warning/10 text-warning border-warning/20"
                         : "bg-muted text-muted-foreground",
-                      "max-w-[100px] sm:max-w-[180px] md:max-w-xs"
+                      "max-w-[100px] sm:max-w-[180px] md:max-w-xs",
+                      badge.className
                     )}
                     title={badge.label ? `${badge.label}: ${badge.value}` : String(badge.value)}
                   >

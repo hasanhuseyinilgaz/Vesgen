@@ -24,6 +24,19 @@ export interface IPCResponse<T = any> {
   disks?: any[];
 }
 
+export interface AppNotification {
+  id: string;
+  title?: string;
+  body?: string;
+  titleKey?: string;
+  bodyKey?: string;
+  data?: Record<string, any>;
+  type: 'info' | 'warning' | 'error' | 'success';
+  timestamp: number;
+  read: boolean;
+  serverId?: string;
+}
+
 export interface ElectronAPI {
   configGet: () => Promise<IPCResponse<any>>;
   configSet: (newConfig: any) => Promise<IPCResponse>;
@@ -65,12 +78,21 @@ export interface ElectronAPI {
   winGetPerformanceStats: (config: WindowsServerResource) => Promise<IPCResponse<any>>;
   winGetServices: (config: WindowsServerResource) => Promise<IPCResponse<any[]>>;
 
+  // Notifications
+  notificationsGet: () => Promise<AppNotification[]>;
+  notificationsMarkAsRead: (id: string) => Promise<boolean>;
+  notificationsToggleRead: (id: string) => Promise<boolean>;
+  notificationsMarkAllAsRead: () => Promise<boolean>;
+  notificationsClearAll: () => Promise<boolean>;
+  onAppNotification: (callback: (data: AppNotification) => void) => () => void;
+
   // Monitoring Service
   monitoringStart: (server: WindowsServerResource) => Promise<IPCResponse>;
   monitoringGetHistory: (serverId: string, dateStr?: string) => Promise<IPCResponse<any[]>>;
   monitoringGetAvailableDates: (serverId: string) => Promise<IPCResponse<string[]>>;
   monitoringStop: (serverId: string) => Promise<IPCResponse>;
   monitoringUpdateInterval: (serverId: string, intervalMs: number) => Promise<IPCResponse>;
+  monitoringUpdateConfig: (serverId: string, config: any) => Promise<IPCResponse>;
   monitoringGenerateReport: (args: { server: WindowsServerResource, range?: string, lang?: string, dateStr?: string, dateRange?: { start?: string, end?: string } }) => Promise<{ success: boolean; message: string; path?: string }>;
   onMonitoringUpdate: (serverId: string, callback: (data: any) => void) => () => void;
   onMonitoringStatus: (serverId: string, callback: (data: any) => void) => () => void;
@@ -103,6 +125,12 @@ export interface ElectronAPI {
   windowMaximize: () => void;
   windowClose: () => void;
 
+  monitoringRefresh: () => Promise<IPCResponse>;
+  monitoringGetAllStatuses: () => Promise<IPCResponse<Record<string, any>>>;
+  appPageChanged: (pagePath: string) => void;
+  appSetTrayLanguage: (langStrings: any) => void;
+  onTenantsUpdated: (callback: () => void) => () => void;
+  sendNetworkStatus: (online: boolean) => void;
   platform: string;
 }
 

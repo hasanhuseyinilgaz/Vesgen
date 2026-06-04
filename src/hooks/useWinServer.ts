@@ -61,20 +61,22 @@ export function useWinServer(tenant: Tenant | null, loadTenantInfo: () => Promis
         }
     };
 
-    const handleSaveWinServer = async (winParams: { alias: string, host: string, username: string, password?: string }) => {
+    const handleSaveWinServer = async (winParams: { 
+        alias: string, 
+        host: string, 
+        username: string, 
+        password?: string,
+        excludeFromMonitoring?: boolean 
+    }) => {
         if (!tenant || !winParams.alias) return false;
         setIsSaving(true);
-        const isConnected = await handleTestWinConnection(winParams);
-        if (!isConnected) {
-            setIsSaving(false);
-            return false;
-        }
         const newServer = {
             id: `win-${Date.now()}`,
             alias: winParams.alias,
             host: winParams.host,
             username: winParams.username,
             password: winParams.password,
+            excludeFromMonitoring: winParams.excludeFromMonitoring || false,
         };
         const updatedTenant = {
             ...tenant,
@@ -97,7 +99,13 @@ export function useWinServer(tenant: Tenant | null, loadTenantInfo: () => Promis
         return false;
     };
 
-    const handleUpdateWinServer = async (serverId: string, winParams: { alias: string, host: string, username: string, password?: string }) => {
+    const handleUpdateWinServer = async (serverId: string, winParams: { 
+        alias: string, 
+        host: string, 
+        username: string, 
+        password?: string,
+        excludeFromMonitoring?: boolean 
+    }) => {
         if (!tenant || !serverId) return false;
         setIsUpdatingWinServer(true);
         try {
@@ -109,12 +117,17 @@ export function useWinServer(tenant: Tenant | null, loadTenantInfo: () => Promis
                         host: winParams.host,
                         username: winParams.username,
                         password: winParams.password,
+                        excludeFromMonitoring: winParams.excludeFromMonitoring || false,
                     }
                     : s,
             );
             const updatedTenant = { ...tenant, windowsServers: updatedServers };
             const res = await window.electronAPI.fsSaveTenant(updatedTenant);
             if (res.success) {
+                const updatedConfig = updatedServers.find(s => s.id === serverId);
+                if (updatedConfig) {
+                    await window.electronAPI.monitoringUpdateConfig(serverId, updatedConfig);
+                }
                 await loadTenantInfo();
                 return true;
             }
