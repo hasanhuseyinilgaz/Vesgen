@@ -14,6 +14,7 @@ interface WinTerminalPageProps {
 }
 
 export default function WinTerminalPage({ server }: WinTerminalPageProps) {
+  const IS_BETA = true; // Set to false to enable Terminal page
   const { t } = useTranslation();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -41,7 +42,7 @@ export default function WinTerminalPage({ server }: WinTerminalPageProps) {
   };
 
   useEffect(() => {
-    if (!server || !terminalRef.current) return;
+    if (IS_BETA || !server || !terminalRef.current) return;
 
     let isMounted = true;
     let cleanup: (() => void) | null = null;
@@ -164,39 +165,84 @@ export default function WinTerminalPage({ server }: WinTerminalPageProps) {
         />
 
         <div className="flex-1 relative bg-slate-950/40 backdrop-blur-2xl border border-white/5 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl shadow-black/50 group focus-within:ring-2 ring-primary/20 transition-all">
-          {connecting && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/60 backdrop-blur-md gap-4">
-              <div className="p-4 rounded-3xl bg-primary/10">
-                <Loader2 className="w-10 h-10 animate-spin text-primary" />
-              </div>
-              <div className="flex flex-col items-center">
-                <p className="text-lg font-bold tracking-tight text-foreground">{t("dashboard.connectingDb", "Bağlanılıyor...")}</p>
-                <p className="text-sm text-muted-foreground">{t("dashboard.pleaseWait", "Lütfen bekleyin...")}</p>
+          {IS_BETA ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center relative overflow-hidden">
+              {/* Background glowing decorations */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] pointer-events-none animate-pulse duration-[8000ms]" />
+              <div className="absolute top-1/4 left-1/3 w-[250px] h-[250px] bg-purple-500/10 rounded-full blur-[80px] pointer-events-none" />
+              
+              <div className="relative z-10 max-w-lg mx-auto flex flex-col items-center gap-6">
+                {/* Visual Icon Badge */}
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-primary/25 rounded-[2.5rem] blur-xl opacity-75 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative p-7 rounded-[2.5rem] bg-gradient-to-b from-white/10 to-white/0 border border-white/10 shadow-2xl flex items-center justify-center backdrop-blur-xl">
+                    <TerminalSquare className="w-16 h-16 text-primary animate-pulse" />
+                  </div>
+                  {/* Small Beta tag overlay */}
+                  <span className="absolute -top-2 -right-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs font-black tracking-widest uppercase px-3 py-1 rounded-full shadow-lg border border-amber-400/20">
+                    BETA
+                  </span>
+                </div>
+
+                <div className="space-y-3 mt-4">
+                  <h3 className="text-3xl font-black tracking-tight text-white bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
+                    {t("dashboard.terminalUnderDevTitle", "Şu Anda Geliştirme Aşamasındadır")}
+                  </h3>
+                  <p className="text-base text-slate-400 leading-relaxed font-medium">
+                    {t("dashboard.terminalUnderDevDesc", "Burası beta sürecinde kullanıma açılacaktır. Terminal modülü üzerinde çalışmalarımız devam ediyor.")}
+                  </p>
+                </div>
+
+                {/* Info Pills */}
+                <div className="flex flex-wrap justify-center gap-3 mt-4">
+                  <span className="px-4 py-2 rounded-2xl bg-white/5 border border-white/5 text-xs font-semibold text-slate-300 flex items-center gap-2 backdrop-blur-md">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                    {t("dashboard.terminalBetaSpecial", "Beta'ya Özel")}
+                  </span>
+                  <span className="px-4 py-2 rounded-2xl bg-white/5 border border-white/5 text-xs font-semibold text-slate-300 flex items-center gap-2 backdrop-blur-md">
+                    {t("dashboard.terminalServerPrefix", "Sunucu:")} {server?.alias || server?.name || 'SSH'}
+                  </span>
+                </div>
               </div>
             </div>
+          ) : (
+            <>
+              {connecting && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/60 backdrop-blur-md gap-4">
+                  <div className="p-4 rounded-3xl bg-primary/10">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <p className="text-lg font-bold tracking-tight text-foreground">{t("dashboard.connectingDb", "Bağlanılıyor...")}</p>
+                    <p className="text-sm text-muted-foreground">{t("dashboard.pleaseWait", "Lütfen bekleyin...")}</p>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-xl p-8 text-center gap-6">
+                  <div className="w-20 h-20 rounded-3xl bg-destructive/10 text-destructive flex items-center justify-center mb-2 border border-destructive/20 shadow-2xl shadow-destructive/10">
+                    <AlertCircle className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-black tracking-tight text-foreground">{t("dashboard.connectionFailed")}</h3>
+                    <p className="text-muted-foreground max-w-md mx-auto text-sm leading-relaxed">{error}</p>
+                  </div>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="mt-4 px-8 py-3 bg-primary text-primary-foreground rounded-2xl font-bold hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20"
+                  >
+                    {t("winPerformance.retryNow")}
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
-          {error && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-xl p-8 text-center gap-6">
-              <div className="w-20 h-20 rounded-3xl bg-destructive/10 text-destructive flex items-center justify-center mb-2 border border-destructive/20 shadow-2xl shadow-destructive/10">
-                <AlertCircle className="w-10 h-10" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black tracking-tight text-foreground">{t("dashboard.connectionFailed")}</h3>
-                <p className="text-muted-foreground max-w-md mx-auto text-sm leading-relaxed">{error}</p>
-              </div>
-              <button 
-                onClick={() => window.location.reload()}
-                className="mt-4 px-8 py-3 bg-primary text-primary-foreground rounded-2xl font-bold hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20"
-              >
-                {t("winPerformance.retryNow")}
-              </button>
-            </div>
-          )}
-
+          {/* We always keep the terminalRef div, but hide it if in Beta mode */}
           <div 
             ref={terminalRef} 
-            className="flex-1 w-full p-8 overflow-hidden" 
+            className={`flex-1 w-full p-8 overflow-hidden ${IS_BETA ? 'hidden' : ''}`} 
             style={{ minHeight: 0 }}
           />
         </div>
